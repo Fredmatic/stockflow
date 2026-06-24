@@ -27,8 +27,14 @@ function Gate({ children }) {
 // Blocks a page if the active staff member's role isn't allowed on this
 // route — checked on every navigation, including a typed-in URL, not just
 // hidden nav links. Redirects to the Dashboard with a short explanation.
+//
+// Exception: /staff is reachable with no activeStaff at all. That's the
+// bootstrap state — before anyone has been added, there's no "owner" to
+// check a role against yet, so the normal role check would wrongly block
+// the very page needed to add the first team member.
 function Restricted({ path, children }) {
   const { activeStaff } = useAuth()
+  if (path === '/staff' && !activeStaff) return children
   if (canAccess(path, activeStaff)) return children
   return <Navigate to="/" replace state={{ blockedFrom: path }} />
 }

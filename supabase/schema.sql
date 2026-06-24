@@ -80,7 +80,8 @@ create table sale_items (
   sale_id uuid not null references sales(id) on delete cascade,
   product_id uuid not null references products(id) on delete restrict,
   quantity integer not null,
-  unit_price numeric(12,2) not null
+  unit_price numeric(12,2) not null,
+  unit_cost numeric(12,2) not null default 0
 );
 
 -- ------------------------------------------------------------

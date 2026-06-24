@@ -10,12 +10,14 @@ export default function Sell() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
+  const canSeeProfit = activeStaff?.role === 'owner'
+
   useEffect(() => {
     if (business) {
       Promise.all([
         supabase
           .from('products')
-          .select('id, name, sku, selling_price')
+          .select('id, name, sku, selling_price, cost_price')
           .eq('business_id', business.id)
           .eq('is_active', true)
           .order('name'),
@@ -49,6 +51,10 @@ export default function Sell() {
   }
 
   const total = cart.reduce((sum, i) => sum + i.quantity * i.product.selling_price, 0)
+  const totalProfit = cart.reduce(
+    (sum, i) => sum + i.quantity * (i.product.selling_price - (i.product.cost_price || 0)),
+    0
+  )
 
   async function completeSale() {
     if (cart.length === 0) return
@@ -66,6 +72,7 @@ export default function Sell() {
         product_id: i.product.id,
         quantity: i.quantity,
         unit_price: i.product.selling_price,
+        unit_cost: i.product.cost_price || 0,
       }))
       const { error: itemsError } = await supabase.from('sale_items').insert(saleItems)
       if (itemsError) throw itemsError
@@ -81,7 +88,11 @@ export default function Sell() {
       const { error: moveError } = await supabase.from('stock_movements').insert(movements)
       if (moveError) throw moveError
 
-      setMessage(`Sale completed — UGX ${total.toLocaleString()}`)
+      setMessage(
+        canSeeProfit
+          ? `Sale completed — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
+          : `Sale completed — UGX ${total.toLocaleString()}`
+      )
       setCart([])
       setTimeout(() => setMessage(''), 4000)
     } catch (err) {
@@ -134,26 +145,38 @@ export default function Sell() {
           <p className="card px-4 py-8 text-center text-sm text-muted">No items added yet.</p>
         ) : (
           <div className="card divide-y divide-line mb-4">
-            {cart.map((i) => (
-              <div key={i.product.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium">{i.product.name}</div>
-                  <div className="text-xs text-muted font-mono">UGX {Number(i.product.selling_price).toLocaleString()} each</div>
+            {cart.map((i) => {
+              const lineProfit = i.quantity * (i.product.selling_price - (i.product.cost_price || 0))
+              return (
+                <div key={i.product.id} className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <div className="text-sm font-medium">{i.product.name}</div>
+                    <div className="text-xs text-muted font-mono">
+                      UGX {Number(i.product.selling_price).toLocaleString()} each
+                      {canSeeProfit && <span className="text-amber ml-2">+{lineProfit.toLocaleString()} profit</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => updateQty(i.product.id, i.quantity - 1)} className="btn-secondary px-2 py-1 text-xs">−</button>
+                    <span className="font-mono w-6 text-center">{i.quantity}</span>
+                    <button onClick={() => updateQty(i.product.id, i.quantity + 1)} className="btn-secondary px-2 py-1 text-xs">+</button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => updateQty(i.product.id, i.quantity - 1)} className="btn-secondary px-2 py-1 text-xs">−</button>
-                  <span className="font-mono w-6 text-center">{i.quantity}</span>
-                  <button onClick={() => updateQty(i.product.id, i.quantity + 1)} className="btn-secondary px-2 py-1 text-xs">+</button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-4 px-1">
+        <div className={`flex items-center justify-between px-1 ${canSeeProfit ? 'mb-1' : 'mb-4'}`}>
           <span className="text-sm font-medium">Total</span>
           <span className="font-mono text-lg font-semibold">UGX {total.toLocaleString()}</span>
         </div>
+        {canSeeProfit && (
+          <div className="flex items-center justify-between mb-4 px-1">
+            <span className="text-xs text-muted">Profit</span>
+            <span className="font-mono text-sm text-amber">UGX {totalProfit.toLocaleString()}</span>
+          </div>
+        )}
 
         <button onClick={completeSale} disabled={busy || cart.length === 0} className="btn-primary w-full">
           {busy ? 'Completing…' : 'Complete sale'}
