@@ -205,7 +205,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
               <input type="number" min="0" className="input font-mono" value={form.cost_price} onChange={(e) => set('cost_price', e.target.value)} />
             </Field>
             <Field label="Selling price (UGX)">
-              <input required type="number" min="0" className="input font-mono" value={form.selling_price} onChange={(e) => set('selling_price', e.target.value)} />
+              <input type="number" min="0" className="input font-mono" value={form.selling_price} onChange={(e) => set('selling_price', e.target.value)} />
             </Field>
           </div>
           <Field label="Reorder level (alert when stock falls to this or below)">
