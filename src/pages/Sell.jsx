@@ -41,10 +41,19 @@ export default function Sell() {
 
   function addToCart(product) {
     const hasPrice = Number(product.selling_price) > 0
+    const available = product.quantity_on_hand ?? 0
     setCart((c) => {
       const existing = c.find((i) => i.product.id === product.id)
       if (existing) {
+        if (existing.quantity >= available) {
+          setMessage(`Error: only ${available} of ${product.name} in stock.`)
+          return c
+        }
         return c.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i)
+      }
+      if (available <= 0) {
+        setMessage(`Error: ${product.name} is out of stock.`)
+        return c
       }
       return [...c, { product, quantity: 1, manualPrice: hasPrice ? null : '' }]
     })
@@ -65,8 +74,15 @@ export default function Sell() {
     const match = products.find((p) => p.barcode && p.barcode === code)
     setScanning(false)
     if (match) {
-      addToCart(match)
-      setScanMessage(`Added: ${match.name}`)
+      const available = match.quantity_on_hand ?? 0
+      const inCart = cart.find((i) => i.product.id === match.id)
+      const alreadyInCart = inCart?.quantity ?? 0
+      if (alreadyInCart >= available) {
+        setScanMessage(`${match.name} is out of stock — can't add more.`)
+      } else {
+        addToCart(match)
+        setScanMessage(`Added: ${match.name}`)
+      }
     } else {
       setScanMessage(`No product matches code "${code}". Add it in Products first.`)
     }
@@ -74,7 +90,19 @@ export default function Sell() {
   }
 
   function updateQty(productId, qty) {
-    setCart((c) => c.map((i) => i.product.id === productId ? { ...i, quantity: qty } : i).filter((i) => i.quantity > 0))
+    setCart((c) =>
+      c
+        .map((i) => {
+          if (i.product.id !== productId) return i
+          const available = i.product.quantity_on_hand ?? 0
+          if (qty > available) {
+            setMessage(`Error: only ${available} of ${i.product.name} in stock.`)
+            return i
+          }
+          return { ...i, quantity: qty }
+        })
+        .filter((i) => i.quantity > 0)
+    )
   }
 
   const total = cart.reduce((sum, i) => sum + i.quantity * unitPriceFor(i), 0)
@@ -195,6 +223,8 @@ export default function Sell() {
               const isManual = i.manualPrice !== null && i.manualPrice !== undefined
               const unitPrice = unitPriceFor(i)
               const lineProfit = i.quantity * (unitPrice - (i.product.cost_price || 0))
+              const available = i.product.quantity_on_hand ?? 0
+              const atMax = i.quantity >= available
               return (
                 <div key={i.product.id} className="px-4 py-3 space-y-2">
                   <div className="flex items-center justify-between">
@@ -210,7 +240,13 @@ export default function Sell() {
                     <div className="flex items-center gap-2">
                       <button onClick={() => updateQty(i.product.id, i.quantity - 1)} className="btn-secondary px-2 py-1 text-xs">−</button>
                       <span className="font-mono w-6 text-center">{i.quantity}</span>
-                      <button onClick={() => updateQty(i.product.id, i.quantity + 1)} className="btn-secondary px-2 py-1 text-xs">+</button>
+                      <button
+                        onClick={() => updateQty(i.product.id, i.quantity + 1)}
+                        disabled={atMax}
+                        className="btn-secondary px-2 py-1 text-xs disabled:opacity-40"
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
                   {isManual && (
