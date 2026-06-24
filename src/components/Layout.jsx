@@ -13,7 +13,12 @@ const NAV_ITEMS = [
 
 export default function Layout() {
   const { business, activeStaff, switchUser, signOut } = useAuth()
-  const visibleNavItems = NAV_ITEMS.filter((item) => canAccess(item.to, activeStaff))
+  // Same bootstrap exception as App.jsx's <Restricted>: before anyone has
+  // picked a staff member, /staff must still be reachable so the owner can
+  // add the first team member at all.
+  const visibleNavItems = NAV_ITEMS.filter(
+    (item) => (item.to === '/staff' && !activeStaff) || canAccess(item.to, activeStaff)
+  )
 
   return (
     <div className="min-h-screen flex">
