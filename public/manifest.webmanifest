@@ -1,6 +1,6 @@
 {
-  "name": "STOCK FLOW",
-  "short_name": "STOCK FLOW",
+  "name": "StockFlow — Inventory & Sales",
+  "short_name": "StockFlow",
   "description": "Track stock, sell products, and see daily revenue and profit.",
   "start_url": "/",
   "scope": "/",

@@ -75,6 +75,23 @@ export default function Sales() {
     return { totalRevenue, totalItems, totalProfit, count: sales.length }
   }, [sales])
 
+  const productBreakdown = useMemo(() => {
+    const byProduct = {}
+    for (const s of sales) {
+      for (const item of s.sale_items || []) {
+        const name = item.products?.name || 'Deleted product'
+        const key = item.product_id || name
+        if (!byProduct[key]) {
+          byProduct[key] = { name, units: 0, revenue: 0, profit: 0 }
+        }
+        byProduct[key].units += item.quantity
+        byProduct[key].revenue += item.quantity * Number(item.unit_price)
+        byProduct[key].profit += item.quantity * (Number(item.unit_price) - Number(item.unit_cost || 0))
+      }
+    }
+    return Object.values(byProduct).sort((a, b) => b.revenue - a.revenue)
+  }, [sales])
+
   function saleProfit(s) {
     return (s.sale_items || []).reduce(
       (sum, i) => sum + i.quantity * (Number(i.unit_price) - Number(i.unit_cost || 0)),
@@ -114,6 +131,8 @@ export default function Sales() {
             <SummaryCard label="Sales" value={summary.count} />
             <SummaryCard label="Items sold" value={summary.totalItems} />
           </div>
+
+          <ProductBreakdown products={productBreakdown} />
 
           <Section title="History" subtitle={`${summary.count} sale${summary.count === 1 ? '' : 's'} in this range`}>
             {sales.length === 0 ? (
@@ -185,6 +204,61 @@ function SummaryCard({ label, value, highlight }) {
       <div className="text-xs text-muted mb-2">{label}</div>
       <div className={`font-mono text-2xl font-semibold ${highlight ? 'text-amber' : 'text-brand-dark'}`}>{value}</div>
     </div>
+  )
+}
+
+function ProductBreakdown({ products }) {
+  const [view, setView] = useState('best')
+
+  if (products.length === 0) return null
+
+  const sorted = view === 'best' ? products : [...products].reverse()
+  const shown = sorted.slice(0, 5)
+  const maxRevenue = shown[0]?.revenue || 1
+
+  return (
+    <Section title="Top products" subtitle="Ranked by revenue in this range">
+      <div className="flex gap-2 mb-3">
+        <button
+          onClick={() => setView('best')}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
+            view === 'best' ? 'bg-brand-light text-brand-dark border-brand-light' : 'border-line text-muted hover:bg-paper'
+          }`}
+        >
+          Best sellers
+        </button>
+        <button
+          onClick={() => setView('worst')}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
+            view === 'worst' ? 'bg-brand-light text-brand-dark border-brand-light' : 'border-line text-muted hover:bg-paper'
+          }`}
+        >
+          Slowest movers
+        </button>
+      </div>
+      <div className="card divide-y divide-line">
+        {shown.map((p, idx) => (
+          <div key={p.name + idx} className="px-4 py-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-sm font-medium">{p.name}</span>
+              <span className="font-mono text-sm font-semibold text-brand-dark">
+                UGX {p.revenue.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted mb-1.5">
+              <span>{p.units} sold</span>
+              <span className="text-amber">+{p.profit.toLocaleString()} profit</span>
+            </div>
+            <div className="h-1.5 bg-paper rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand rounded-full"
+                style={{ width: `${Math.max(4, (p.revenue / maxRevenue) * 100)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
   )
 }
 
