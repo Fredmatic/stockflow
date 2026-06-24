@@ -45,7 +45,7 @@ export default function Sales() {
     setLoading(true)
     let query = supabase
       .from('sales')
-      .select('*, staff_users(name), sale_items(id, quantity, unit_price, unit_cost, products(name))')
+      .select('*, staff_users(name), sale_items(id, quantity, unit_price, products(name))')
       .eq('business_id', business.id)
       .order('created_at', { ascending: false })
 
@@ -63,24 +63,8 @@ export default function Sales() {
       (sum, s) => sum + (s.sale_items || []).reduce((isum, i) => isum + i.quantity, 0),
       0
     )
-    const totalProfit = sales.reduce(
-      (sum, s) =>
-        sum +
-        (s.sale_items || []).reduce(
-          (isum, i) => isum + i.quantity * (Number(i.unit_price) - Number(i.unit_cost || 0)),
-          0
-        ),
-      0
-    )
-    return { totalRevenue, totalItems, totalProfit, count: sales.length }
+    return { totalRevenue, totalItems, count: sales.length }
   }, [sales])
-
-  function saleProfit(s) {
-    return (s.sale_items || []).reduce(
-      (sum, i) => sum + i.quantity * (Number(i.unit_price) - Number(i.unit_cost || 0)),
-      0
-    )
-  }
 
   return (
     <div className="space-y-8">
@@ -94,10 +78,11 @@ export default function Sales() {
           <button
             key={r.key}
             onClick={() => setRange(r.key)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium border ${range === r.key
+            className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
+              range === r.key
                 ? 'bg-brand-light text-brand-dark border-brand-light'
                 : 'border-line text-muted hover:bg-paper'
-              }`}
+            }`}
           >
             {r.label}
           </button>
@@ -108,9 +93,8 @@ export default function Sales() {
         <p className="text-muted text-sm">Loading…</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <SummaryCard label="Revenue" value={`UGX ${summary.totalRevenue.toLocaleString()}`} />
-            <SummaryCard label="Profit" value={`UGX ${summary.totalProfit.toLocaleString()}`} highlight />
             <SummaryCard label="Sales" value={summary.count} />
             <SummaryCard label="Items sold" value={summary.totalItems} />
           </div>
@@ -140,31 +124,22 @@ export default function Sales() {
                             {s.staff_users?.name || 'Unknown staff'} · {itemCount} item{itemCount === 1 ? '' : 's'}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="font-mono text-sm font-semibold text-brand-dark">
-                            UGX {Number(s.total_amount).toLocaleString()}
-                          </div>
-                          <div className="font-mono text-xs text-amber">
-                            +{saleProfit(s).toLocaleString()} profit
-                          </div>
+                        <div className="font-mono text-sm font-semibold text-brand-dark">
+                          UGX {Number(s.total_amount).toLocaleString()}
                         </div>
                       </button>
                       {isOpen && (
                         <div className="px-4 pb-3 -mt-1 space-y-1 bg-paper">
-                          {(s.sale_items || []).map((item) => {
-                            const itemProfit = item.quantity * (Number(item.unit_price) - Number(item.unit_cost || 0))
-                            return (
-                              <div key={item.id} className="flex items-center justify-between text-xs text-muted pl-2">
-                                <span>
-                                  {item.quantity} × {item.products?.name || 'Deleted product'}
-                                </span>
-                                <span className="font-mono">
-                                  UGX {(item.quantity * Number(item.unit_price)).toLocaleString()}
-                                  <span className="text-amber ml-2">+{itemProfit.toLocaleString()}</span>
-                                </span>
-                              </div>
-                            )
-                          })}
+                          {(s.sale_items || []).map((item) => (
+                            <div key={item.id} className="flex items-center justify-between text-xs text-muted pl-2">
+                              <span>
+                                {item.quantity} × {item.products?.name || 'Deleted product'}
+                              </span>
+                              <span className="font-mono">
+                                UGX {(item.quantity * Number(item.unit_price)).toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -179,11 +154,11 @@ export default function Sales() {
   )
 }
 
-function SummaryCard({ label, value, highlight }) {
+function SummaryCard({ label, value }) {
   return (
     <div className="card p-4">
       <div className="text-xs text-muted mb-2">{label}</div>
-      <div className={`font-mono text-2xl font-semibold ${highlight ? 'text-amber' : 'text-brand-dark'}`}>{value}</div>
+      <div className="font-mono text-2xl font-semibold text-brand-dark">{value}</div>
     </div>
   )
 }
