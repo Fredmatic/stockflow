@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
 export default function Staff() {
-  const { business } = useAuth()
+  const { business, activeStaff } = useAuth()
   const [staffList, setStaffList] = useState([])
   const [name, setName] = useState('')
   const [role, setRole] = useState('cashier')
@@ -96,6 +97,12 @@ export default function Staff() {
         ))}
         {staffList.length === 0 && <p className="px-4 py-6 text-sm text-muted text-center">No team members yet.</p>}
       </div>
+
+      {staffList.length > 0 && (
+        <Link to="/" className="btn-primary w-full block text-center">
+          {activeStaff ? 'Done — back to dashboard' : 'Done — continue to sign in'}
+        </Link>
+      )}
     </div>
   )
 }
