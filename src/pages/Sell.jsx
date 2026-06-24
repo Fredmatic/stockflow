@@ -15,7 +15,7 @@ export default function Sell() {
       Promise.all([
         supabase
           .from('products')
-          .select('id, name, sku, selling_price')
+          .select('id, name, sku, selling_price, cost_price')
           .eq('business_id', business.id)
           .eq('is_active', true)
           .order('name'),
@@ -66,6 +66,7 @@ export default function Sell() {
         product_id: i.product.id,
         quantity: i.quantity,
         unit_price: i.product.selling_price,
+        unit_cost: i.product.cost_price || 0,
       }))
       const { error: itemsError } = await supabase.from('sale_items').insert(saleItems)
       if (itemsError) throw itemsError
