@@ -1,6 +1,9 @@
+import { useRef, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { canAccess } from '../lib/permissions'
+import { hasTutorialBeenDismissed } from '../lib/tutorialStorage'
+import TutorialPopup from './TutorialPopup'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: '◧' },
@@ -20,6 +23,20 @@ export default function Layout() {
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => (item.to === '/staff' && !activeStaff) || canAccess(item.to, activeStaff)
   )
+
+  // Show the walkthrough right after someone picks their name/PIN, unless
+  // they've already told us (on this device) not to show it again. Computed
+  // during render (not in an effect) so it's correct on the very first paint
+  // after activeStaff changes, with no extra render cycle.
+  const lastCheckedStaffId = useRef(null)
+  const [tutorialDismissedThisSession, setTutorialDismissedThisSession] = useState(false)
+
+  if (activeStaff?.id !== lastCheckedStaffId.current) {
+    lastCheckedStaffId.current = activeStaff?.id ?? null
+    setTutorialDismissedThisSession(false)
+  }
+
+  const showTutorial = !!activeStaff && !tutorialDismissedThisSession && !hasTutorialBeenDismissed(activeStaff.id)
 
   return (
     <div className="min-h-screen flex">
@@ -91,6 +108,14 @@ export default function Layout() {
           ))}
         </nav>
       </div>
+
+      {showTutorial && (
+        <TutorialPopup
+          staffId={activeStaff?.id}
+          activeStaff={activeStaff}
+          onClose={() => setTutorialDismissedThisSession(true)}
+        />
+      )}
     </div>
   )
 }
