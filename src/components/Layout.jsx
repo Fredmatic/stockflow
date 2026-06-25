@@ -59,7 +59,7 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col">
-        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-line bg-paper-raised">
+        <header className="md:hidden sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-line bg-paper-raised">
           <div>
             <div className="font-display font-semibold text-brand-dark text-sm">StockFlow</div>
             <div className="text-xs text-muted">{business?.name}</div>
