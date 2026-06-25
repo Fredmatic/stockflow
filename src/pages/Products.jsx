@@ -232,11 +232,6 @@ function ProductForm({ business, product, onClose, onSaved }) {
         setError('Add at least one type (e.g. Ceramic) with a name.')
         return
       }
-      const missingPrice = cleanRows.find((r) => !r.selling_price)
-      if (missingPrice) {
-        setError(`Enter a selling price for "${missingPrice.name}".`)
-        return
-      }
     }
 
     setBusy(true)
@@ -423,7 +418,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
           {hasVariants && (
             <div className="space-y-3 pt-1">
               <div className="text-xs font-medium text-muted">
-                Types — each has its own cost &amp; selling price
+                Types — each can have its own cost &amp; selling price (optional — leave blank to set the price manually at sale time)
               </div>
 
               {loadingVariants ? (
@@ -446,14 +441,14 @@ function ProductForm({ business, product, onClose, onSaved }) {
                       <input
                         type="number" min="0"
                         className="input font-mono text-sm"
-                        placeholder="Cost price"
+                        placeholder="Cost price (optional)"
                         value={v.cost_price}
                         onChange={(e) => setExistingVariantField(v.id, 'cost_price', e.target.value)}
                       />
                       <input
                         type="number" min="0"
                         className="input font-mono text-sm"
-                        placeholder="Selling price"
+                        placeholder="Selling price (optional)"
                         value={v.selling_price}
                         onChange={(e) => setExistingVariantField(v.id, 'selling_price', e.target.value)}
                       />
@@ -484,14 +479,14 @@ function ProductForm({ business, product, onClose, onSaved }) {
                     <input
                       type="number" min="0"
                       className="input font-mono text-sm"
-                      placeholder="Cost price"
+                      placeholder="Cost price (optional)"
                       value={r.cost_price}
                       onChange={(e) => setNewVariantField(r.key, 'cost_price', e.target.value)}
                     />
                     <input
                       type="number" min="0"
                       className="input font-mono text-sm"
-                      placeholder="Selling price"
+                      placeholder="Selling price (optional)"
                       value={r.selling_price}
                       onChange={(e) => setNewVariantField(r.key, 'selling_price', e.target.value)}
                     />
