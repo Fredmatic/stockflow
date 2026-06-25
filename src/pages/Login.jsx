@@ -42,8 +42,8 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="font-display text-2xl font-semibold text-brand-dark">StockFlow</div>
-          <p className="text-muted text-sm mt-1">Know what's in, what's out, what's lacking.</p>
+          <div className="font-display text-2xl font-semibold text-brand-dark">StockTracker</div>
+          <p className="text-muted text-sm mt-1">We aim to maximize profits by preventing stockouts while minimizing excess stock that drains cash flow.</p>
         </div>
 
         <div className="bg-paper-raised border border-line rounded-lg p-6">
@@ -51,18 +51,16 @@ export default function Login() {
             <button
               type="button"
               onClick={() => setMode('signin')}
-              className={`flex-1 text-sm font-medium py-1.5 rounded ${
-                mode === 'signin' ? 'bg-paper-raised shadow-sm text-ink' : 'text-muted'
-              }`}
+              className={`flex-1 text-sm font-medium py-1.5 rounded ${mode === 'signin' ? 'bg-paper-raised shadow-sm text-ink' : 'text-muted'
+                }`}
             >
               Sign in
             </button>
             <button
               type="button"
               onClick={() => setMode('signup')}
-              className={`flex-1 text-sm font-medium py-1.5 rounded ${
-                mode === 'signup' ? 'bg-paper-raised shadow-sm text-ink' : 'text-muted'
-              }`}
+              className={`flex-1 text-sm font-medium py-1.5 rounded ${mode === 'signup' ? 'bg-paper-raised shadow-sm text-ink' : 'text-muted'
+                }`}
             >
               Create business
             </button>
