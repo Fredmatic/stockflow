@@ -84,6 +84,21 @@ create table sale_items (
   unit_cost numeric(12,2) not null default 0
 );
 
+-- Operating expenses (rent, transport, utilities, etc.) — tracked
+-- separately from cost-of-goods so "net profit" can be shown alongside
+-- the per-product gross margin already calculated from sale_items.
+create table expenses (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id) on delete cascade,
+  staff_user_id uuid references staff_users(id) on delete set null,
+  category text not null,
+  amount numeric(12,2) not null,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index on expenses (business_id, created_at desc);
+
 -- ------------------------------------------------------------
 -- View: current stock level per product (the heart of the app)
 -- ------------------------------------------------------------
@@ -118,6 +133,7 @@ alter table products enable row level security;
 alter table stock_movements enable row level security;
 alter table sales enable row level security;
 alter table sale_items enable row level security;
+alter table expenses enable row level security;
 
 create policy "owner_full_access" on businesses
   for all using (owner_auth_id = auth.uid());
@@ -143,3 +159,6 @@ create policy "owner_full_access" on sale_items
       select id from businesses where owner_auth_id = auth.uid()
     )
   ));
+
+create policy "owner_full_access" on expenses
+  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));

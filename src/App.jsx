@@ -10,6 +10,7 @@ import StockIn from './pages/StockIn'
 import Sell from './pages/Sell'
 import Sales from './pages/Sales'
 import Staff from './pages/Staff'
+import Expenses from './pages/Expenses'
 
 function Gate({ children }) {
   const { session, business, activeStaff, loading } = useAuth()
@@ -51,6 +52,7 @@ export default function App() {
               <Route path="/stock-in" element={<Restricted path="/stock-in"><StockIn /></Restricted>} />
               <Route path="/sell" element={<Restricted path="/sell"><Sell /></Restricted>} />
               <Route path="/sales" element={<Restricted path="/sales"><Sales /></Restricted>} />
+              <Route path="/expenses" element={<Restricted path="/expenses"><Expenses /></Restricted>} />
               <Route path="/staff" element={<Restricted path="/staff"><Staff /></Restricted>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

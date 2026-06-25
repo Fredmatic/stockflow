@@ -7,6 +7,7 @@ const ROUTE_LABELS = {
   '/products': 'Products',
   '/stock-in': 'Stock In',
   '/sales': 'Sales',
+  '/expenses': 'Expenses',
   '/staff': 'Staff',
 }
 

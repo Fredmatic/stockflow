@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
@@ -30,11 +31,14 @@ function startOfRange(key) {
 }
 
 export default function Sales() {
-  const { business } = useAuth()
+  const { business, activeStaff } = useAuth()
   const [range, setRange] = useState('today')
   const [sales, setSales] = useState([])
+  const [expensesTotal, setExpensesTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(null)
+
+  const canSeeNetProfit = activeStaff?.role === 'owner'
 
   useEffect(() => {
     if (!business) return
@@ -54,6 +58,14 @@ export default function Sales() {
 
     const { data, error } = await query
     if (!error) setSales(data || [])
+
+    if (canSeeNetProfit) {
+      let expQuery = supabase.from('expenses').select('amount').eq('business_id', business.id)
+      if (from) expQuery = expQuery.gte('created_at', from.toISOString())
+      const { data: expData } = await expQuery
+      setExpensesTotal((expData || []).reduce((sum, e) => sum + Number(e.amount), 0))
+    }
+
     setLoading(false)
   }
 
@@ -131,6 +143,23 @@ export default function Sales() {
             <SummaryCard label="Sales" value={summary.count} />
             <SummaryCard label="Items sold" value={summary.totalItems} />
           </div>
+
+          {canSeeNetProfit && (
+            <div className="card p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted mb-1">Net profit (after expenses)</div>
+                <Link to="/expenses" className="text-xs text-brand-dark hover:underline">Manage expenses →</Link>
+              </div>
+              <div
+                className={`font-mono text-2xl font-semibold ${summary.totalProfit - expensesTotal < 0 ? 'text-brick' : 'text-brand-dark'}`}
+              >
+                UGX {(summary.totalProfit - expensesTotal).toLocaleString()}
+              </div>
+              <div className="text-xs text-muted mt-1">
+                {`UGX ${summary.totalProfit.toLocaleString()} profit − UGX ${expensesTotal.toLocaleString()} expenses`}
+              </div>
+            </div>
+          )}
 
           <ProductBreakdown products={productBreakdown} />
 

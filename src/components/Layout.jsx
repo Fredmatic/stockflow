@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: '/stock-in', label: 'Stock In', icon: '↓' },
   { to: '/sell', label: 'Sell', icon: '↑' },
   { to: '/sales', label: 'Sales', icon: '◫' },
+  { to: '/expenses', label: 'Expenses', icon: '−' },
   { to: '/staff', label: 'Staff', icon: '◍' },
 ]
 

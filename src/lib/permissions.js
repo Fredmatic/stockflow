@@ -11,6 +11,7 @@ export const ROUTE_ACCESS = {
   '/stock-in': ['owner', 'staff'],
   '/sell': ['owner', 'staff', 'cashier'],
   '/sales': ['owner', 'staff'],
+  '/expenses': ['owner'],
   '/staff': ['owner'],
 }
 
