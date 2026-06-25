@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { ScannerModal, ScanIcon } from '../components/Scanner'
 
 export default function Products() {
   const { business } = useAuth()
@@ -125,9 +126,15 @@ function ProductForm({ business, product, onClose, onSaved }) {
   })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [scanning, setScanning] = useState(false)
 
   function set(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  function handleScan(code) {
+    set('barcode', code)
+    setScanning(false)
   }
 
   async function handleSubmit(e) {
@@ -197,7 +204,12 @@ function ProductForm({ business, product, onClose, onSaved }) {
               <input className="input" value={form.sku} onChange={(e) => set('sku', e.target.value)} />
             </Field>
             <Field label="Barcode">
-              <input className="input" value={form.barcode} onChange={(e) => set('barcode', e.target.value)} />
+              <div className="flex gap-2">
+                <input className="input flex-1" value={form.barcode} onChange={(e) => set('barcode', e.target.value)} />
+                <button type="button" onClick={() => setScanning(true)} className="btn-secondary px-3" aria-label="Scan barcode">
+                  <ScanIcon />
+                </button>
+              </div>
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -248,6 +260,14 @@ function ProductForm({ business, product, onClose, onSaved }) {
           )}
         </form>
       </div>
+
+      {scanning && (
+        <ScannerModal
+          onResult={handleScan}
+          onClose={() => setScanning(false)}
+          instructions="Point the camera at the product's barcode or QR code to fill it in automatically."
+        />
+      )}
     </div>
   )
 }
