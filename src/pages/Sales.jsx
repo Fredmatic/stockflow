@@ -30,6 +30,11 @@ function startOfRange(key) {
   return null // 'all'
 }
 
+function itemName(item) {
+  const base = item.products?.name || 'Deleted product'
+  return item.product_variants?.name ? `${base} — ${item.product_variants.name}` : base
+}
+
 export default function Sales() {
   const { business, activeStaff } = useAuth()
   const [range, setRange] = useState('today')
@@ -49,7 +54,7 @@ export default function Sales() {
     setLoading(true)
     let query = supabase
       .from('sales')
-      .select('*, staff_users(name), sale_items(id, quantity, unit_price, unit_cost, products(name))')
+      .select('*, staff_users(name), sale_items(id, quantity, unit_price, unit_cost, product_id, variant_id, products(name), product_variants(name))')
       .eq('business_id', business.id)
       .order('created_at', { ascending: false })
 
@@ -91,8 +96,8 @@ export default function Sales() {
     const byProduct = {}
     for (const s of sales) {
       for (const item of s.sale_items || []) {
-        const name = item.products?.name || 'Deleted product'
-        const key = item.product_id || name
+        const name = itemName(item)
+        const key = item.variant_id || item.product_id || name
         if (!byProduct[key]) {
           byProduct[key] = { name, units: 0, revenue: 0, profit: 0 }
         }
@@ -204,7 +209,7 @@ export default function Sales() {
                             return (
                               <div key={item.id} className="flex items-center justify-between text-xs text-muted pl-2">
                                 <span>
-                                  {item.quantity} × {item.products?.name || 'Deleted product'}
+                                  {item.quantity} × {itemName(item)}
                                 </span>
                                 <span className="font-mono">
                                   UGX {(item.quantity * Number(item.unit_price)).toLocaleString()}

@@ -3,11 +3,19 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
 
+function lineId(item) {
+  return item.variant_id || item.product_id
+}
+
+function displayName(item) {
+  return item.variant_name ? `${item.product_name} — ${item.variant_name}` : item.product_name
+}
+
 export default function Sell() {
   const { business, activeStaff } = useAuth()
-  const [products, setProducts] = useState([])
+  const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
-  const [cart, setCart] = useState([]) // {product, quantity}
+  const [cart, setCart] = useState([]) // {item, quantity, manualPrice}
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -17,71 +25,61 @@ export default function Sell() {
 
   useEffect(() => {
     if (business) {
-      Promise.all([
-        supabase
-          .from('products')
-          .select('id, name, sku, barcode, selling_price, cost_price')
-          .eq('business_id', business.id)
-          .eq('is_active', true)
-          .order('name'),
-        supabase
-          .from('product_stock')
-          .select('product_id, quantity_on_hand')
-          .eq('business_id', business.id),
-      ]).then(([{ data: productsData }, { data: stockData }]) => {
-        const stockMap = Object.fromEntries((stockData || []).map((s) => [s.product_id, s.quantity_on_hand]))
-        setProducts((productsData || []).map((p) => ({ ...p, quantity_on_hand: stockMap[p.id] ?? 0 })))
-      })
+      supabase
+        .from('product_stock')
+        .select('product_id, variant_id, product_name, variant_name, sku, barcode, selling_price, cost_price, quantity_on_hand')
+        .eq('business_id', business.id)
+        .then(({ data }) => setItems(data || []))
     }
   }, [business])
 
-  const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase())
+  const filtered = items.filter((p) =>
+    displayName(p).toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase())
   )
 
-  function addToCart(product) {
-    const hasPrice = Number(product.selling_price) > 0
-    const available = product.quantity_on_hand ?? 0
+  function addToCart(item) {
+    const hasPrice = Number(item.selling_price) > 0
+    const available = item.quantity_on_hand ?? 0
     setCart((c) => {
-      const existing = c.find((i) => i.product.id === product.id)
+      const existing = c.find((i) => lineId(i.item) === lineId(item))
       if (existing) {
         if (existing.quantity >= available) {
-          setMessage(`Error: only ${available} of ${product.name} in stock.`)
+          setMessage(`Error: only ${available} of ${displayName(item)} in stock.`)
           return c
         }
-        return c.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i)
+        return c.map((i) => (lineId(i.item) === lineId(item) ? { ...i, quantity: i.quantity + 1 } : i))
       }
       if (available <= 0) {
-        setMessage(`Error: ${product.name} is out of stock.`)
+        setMessage(`Error: ${displayName(item)} is out of stock.`)
         return c
       }
-      return [...c, { product, quantity: 1, manualPrice: hasPrice ? null : '' }]
+      return [...c, { item, quantity: 1, manualPrice: hasPrice ? null : '' }]
     })
   }
 
-  function setManualPrice(productId, value) {
-    setCart((c) => c.map((i) => i.product.id === productId ? { ...i, manualPrice: value } : i))
+  function setManualPrice(id, value) {
+    setCart((c) => c.map((i) => (lineId(i.item) === id ? { ...i, manualPrice: value } : i)))
   }
 
-  function unitPriceFor(item) {
-    if (item.manualPrice !== null && item.manualPrice !== undefined) {
-      return Number(item.manualPrice) || 0
+  function unitPriceFor(i) {
+    if (i.manualPrice !== null && i.manualPrice !== undefined) {
+      return Number(i.manualPrice) || 0
     }
-    return Number(item.product.selling_price) || 0
+    return Number(i.item.selling_price) || 0
   }
 
   function handleScan(code) {
-    const match = products.find((p) => p.barcode && p.barcode === code)
+    const match = items.find((p) => p.barcode && p.barcode === code)
     setScanning(false)
     if (match) {
       const available = match.quantity_on_hand ?? 0
-      const inCart = cart.find((i) => i.product.id === match.id)
+      const inCart = cart.find((i) => lineId(i.item) === lineId(match))
       const alreadyInCart = inCart?.quantity ?? 0
       if (alreadyInCart >= available) {
-        setScanMessage(`${match.name} is out of stock — can't add more.`)
+        setScanMessage(`${displayName(match)} is out of stock — can't add more.`)
       } else {
         addToCart(match)
-        setScanMessage(`Added: ${match.name}`)
+        setScanMessage(`Added: ${displayName(match)}`)
       }
     } else {
       setScanMessage(`No product matches code "${code}". Add it in Products first.`)
@@ -89,14 +87,14 @@ export default function Sell() {
     setTimeout(() => setScanMessage(''), 4000)
   }
 
-  function updateQty(productId, qty) {
+  function updateQty(id, qty) {
     setCart((c) =>
       c
         .map((i) => {
-          if (i.product.id !== productId) return i
-          const available = i.product.quantity_on_hand ?? 0
+          if (lineId(i.item) !== id) return i
+          const available = i.item.quantity_on_hand ?? 0
           if (qty > available) {
-            setMessage(`Error: only ${available} of ${i.product.name} in stock.`)
+            setMessage(`Error: only ${available} of ${displayName(i.item)} in stock.`)
             return i
           }
           return { ...i, quantity: qty }
@@ -107,7 +105,7 @@ export default function Sell() {
 
   const total = cart.reduce((sum, i) => sum + i.quantity * unitPriceFor(i), 0)
   const totalProfit = cart.reduce(
-    (sum, i) => sum + i.quantity * (unitPriceFor(i) - (i.product.cost_price || 0)),
+    (sum, i) => sum + i.quantity * (unitPriceFor(i) - (i.item.cost_price || 0)),
     0
   )
 
@@ -115,7 +113,7 @@ export default function Sell() {
     if (cart.length === 0) return
     const missingPrice = cart.find((i) => unitPriceFor(i) <= 0)
     if (missingPrice) {
-      setMessage(`Error: enter a price for ${missingPrice.product.name} before completing the sale.`)
+      setMessage(`Error: enter a price for ${displayName(missingPrice.item)} before completing the sale.`)
       return
     }
     setBusy(true)
@@ -129,16 +127,18 @@ export default function Sell() {
 
       const saleItems = cart.map((i) => ({
         sale_id: sale.id,
-        product_id: i.product.id,
+        product_id: i.item.product_id,
+        variant_id: i.item.variant_id || null,
         quantity: i.quantity,
         unit_price: unitPriceFor(i),
-        unit_cost: i.product.cost_price || 0,
+        unit_cost: i.item.cost_price || 0,
       }))
       const { error: itemsError } = await supabase.from('sale_items').insert(saleItems)
       if (itemsError) throw itemsError
 
       const movements = cart.map((i) => ({
-        product_id: i.product.id,
+        product_id: i.item.product_id,
+        variant_id: i.item.variant_id || null,
         business_id: business.id,
         type: 'sale',
         quantity: -i.quantity,
@@ -185,13 +185,13 @@ export default function Sell() {
             const noPrice = !p.selling_price || Number(p.selling_price) <= 0
             return (
               <button
-                key={p.id}
+                key={lineId(p)}
                 onClick={() => addToCart(p)}
                 disabled={qty <= 0}
                 className="w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-paper disabled:opacity-40"
               >
                 <div>
-                  <div className="font-medium">{p.name}</div>
+                  <div className="font-medium">{displayName(p)}</div>
                   <div className="text-xs text-muted">
                     {noPrice ? (
                       <span className="text-brick">No saved price — you'll enter one</span>
@@ -220,16 +220,17 @@ export default function Sell() {
         ) : (
           <div className="card divide-y divide-line mb-4">
             {cart.map((i) => {
+              const id = lineId(i.item)
               const isManual = i.manualPrice !== null && i.manualPrice !== undefined
               const unitPrice = unitPriceFor(i)
-              const lineProfit = i.quantity * (unitPrice - (i.product.cost_price || 0))
-              const available = i.product.quantity_on_hand ?? 0
+              const lineProfit = i.quantity * (unitPrice - (i.item.cost_price || 0))
+              const available = i.item.quantity_on_hand ?? 0
               const atMax = i.quantity >= available
               return (
-                <div key={i.product.id} className="px-4 py-3 space-y-2">
+                <div key={id} className="px-4 py-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-sm font-medium">{i.product.name}</div>
+                      <div className="text-sm font-medium">{displayName(i.item)}</div>
                       {!isManual && (
                         <div className="text-xs text-muted font-mono">
                           UGX {Number(unitPrice).toLocaleString()} each
@@ -238,10 +239,10 @@ export default function Sell() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => updateQty(i.product.id, i.quantity - 1)} className="btn-secondary px-2 py-1 text-xs">−</button>
+                      <button onClick={() => updateQty(id, i.quantity - 1)} className="btn-secondary px-2 py-1 text-xs">−</button>
                       <span className="font-mono w-6 text-center">{i.quantity}</span>
                       <button
-                        onClick={() => updateQty(i.product.id, i.quantity + 1)}
+                        onClick={() => updateQty(id, i.quantity + 1)}
                         disabled={atMax}
                         className="btn-secondary px-2 py-1 text-xs disabled:opacity-40"
                       >
@@ -259,7 +260,7 @@ export default function Sell() {
                         placeholder="e.g. 5000"
                         className="input font-mono py-1 text-sm"
                         value={i.manualPrice}
-                        onChange={(e) => setManualPrice(i.product.id, e.target.value)}
+                        onChange={(e) => setManualPrice(id, e.target.value)}
                       />
                     </div>
                   )}

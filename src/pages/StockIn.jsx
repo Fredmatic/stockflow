@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
+function displayName(item) {
+  return item.variant_name ? `${item.product_name} — ${item.variant_name}` : item.product_name
+}
+
 export default function StockIn() {
   const { business, activeStaff } = useAuth()
-  const [products, setProducts] = useState([])
+  const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [quantity, setQuantity] = useState('')
@@ -15,17 +19,15 @@ export default function StockIn() {
   useEffect(() => {
     if (business) {
       supabase
-        .from('products')
-        .select('id, name, sku')
+        .from('product_stock')
+        .select('product_id, variant_id, product_name, variant_name, sku')
         .eq('business_id', business.id)
-        .eq('is_active', true)
-        .order('name')
-        .then(({ data }) => setProducts(data || []))
+        .then(({ data }) => setItems(data || []))
     }
   }, [business])
 
-  const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase())
+  const filtered = items.filter((p) =>
+    displayName(p).toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase())
   )
 
   async function handleSubmit(e) {
@@ -33,14 +35,15 @@ export default function StockIn() {
     if (!selected || !quantity) return
     setBusy(true)
     await supabase.from('stock_movements').insert({
-      product_id: selected.id,
+      product_id: selected.product_id,
+      variant_id: selected.variant_id || null,
       business_id: business.id,
       type: 'restock',
       quantity: Number(quantity),
       note: note || null,
       staff_user_id: activeStaff?.id || null,
     })
-    setMessage(`Added ${quantity} of ${selected.name} to stock.`)
+    setMessage(`Added ${quantity} of ${displayName(selected)} to stock.`)
     setSelected(null)
     setQuantity('')
     setNote('')
@@ -69,11 +72,11 @@ export default function StockIn() {
           <div className="card divide-y divide-line max-h-80 overflow-y-auto">
             {filtered.map((p) => (
               <button
-                key={p.id}
+                key={p.variant_id || p.product_id}
                 onClick={() => setSelected(p)}
                 className="w-full text-left px-4 py-3 text-sm hover:bg-paper"
               >
-                {p.name} {p.sku && <span className="text-muted text-xs">· {p.sku}</span>}
+                {displayName(p)} {p.sku && <span className="text-muted text-xs">· {p.sku}</span>}
               </button>
             ))}
             {filtered.length === 0 && <p className="px-4 py-6 text-sm text-muted text-center">No products found.</p>}
@@ -82,7 +85,7 @@ export default function StockIn() {
       ) : (
         <form onSubmit={handleSubmit} className="card p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="font-medium text-sm">{selected.name}</span>
+            <span className="font-medium text-sm">{displayName(selected)}</span>
             <button type="button" onClick={() => setSelected(null)} className="text-xs text-muted">Change</button>
           </div>
           <label className="block">

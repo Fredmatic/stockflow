@@ -45,17 +45,40 @@ create table products (
   selling_price numeric(12,2) not null default 0,
   reorder_level integer not null default 5,
   attributes jsonb not null default '{}'::jsonb, -- e.g. {"imei":"..."} or {"expiry_date":"..."}
+  has_variants boolean not null default false, -- true = priced/stocked per product_variants row instead of on this row
   is_active boolean not null default true,
   created_at timestamptz not null default now()
 );
 
 create index on products (business_id);
 
+-- Types/variants of a product (e.g. "Screen Guard" -> Ceramic, Full Glue,
+-- Matte), each with its own price, cost price, and stock. Used when
+-- products.has_variants = true; the parent products row then just holds
+-- the shared name/category, and selling/stocking happens per variant.
+create table product_variants (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references products(id) on delete cascade,
+  business_id uuid not null references businesses(id) on delete cascade,
+  name text not null,
+  sku text,
+  barcode text,
+  cost_price numeric(12,2) not null default 0,
+  selling_price numeric(12,2) not null default 0,
+  reorder_level integer not null default 5,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index on product_variants (product_id);
+create index on product_variants (business_id);
+
 -- Every stock change is a row here. Current quantity = sum(quantity).
 -- quantity is signed: positive = stock added, negative = stock removed.
 create table stock_movements (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references products(id) on delete cascade,
+  variant_id uuid references product_variants(id) on delete cascade,
   business_id uuid not null references businesses(id) on delete cascade,
   type text not null check (type in ('restock', 'sale', 'adjustment', 'damaged')),
   quantity integer not null,
@@ -65,6 +88,7 @@ create table stock_movements (
 );
 
 create index on stock_movements (product_id);
+create index on stock_movements (variant_id);
 create index on stock_movements (business_id, created_at desc);
 
 create table sales (
@@ -79,6 +103,7 @@ create table sale_items (
   id uuid primary key default gen_random_uuid(),
   sale_id uuid not null references sales(id) on delete cascade,
   product_id uuid not null references products(id) on delete restrict,
+  variant_id uuid references product_variants(id) on delete set null,
   quantity integer not null,
   unit_price numeric(12,2) not null,
   unit_cost numeric(12,2) not null default 0
@@ -100,16 +125,22 @@ create table expenses (
 create index on expenses (business_id, created_at desc);
 
 -- ------------------------------------------------------------
--- View: current stock level per product (the heart of the app)
+-- View: current stock level per SELLABLE item (the heart of the app).
+-- A row is either a simple product, or one variant/type of a
+-- variant-parent product (has_variants = true).
 -- ------------------------------------------------------------
 create view product_stock as
 select
   p.id as product_id,
+  null::uuid as variant_id,
   p.business_id,
-  p.name,
+  p.name as product_name,
+  null::text as variant_name,
   p.sku,
+  p.barcode,
   p.reorder_level,
   p.selling_price,
+  p.cost_price,
   coalesce(sum(sm.quantity), 0) as quantity_on_hand,
   case
     when coalesce(sum(sm.quantity), 0) <= 0 then 'out_of_stock'
@@ -117,9 +148,34 @@ select
     else 'in_stock'
   end as status
 from products p
-left join stock_movements sm on sm.product_id = p.id
-where p.is_active = true
-group by p.id, p.business_id, p.name, p.sku, p.reorder_level, p.selling_price;
+left join stock_movements sm on sm.product_id = p.id and sm.variant_id is null
+where p.is_active = true and p.has_variants = false
+group by p.id, p.business_id, p.name, p.sku, p.barcode, p.reorder_level, p.selling_price, p.cost_price
+
+union all
+
+select
+  v.product_id,
+  v.id as variant_id,
+  v.business_id,
+  p.name as product_name,
+  v.name as variant_name,
+  v.sku,
+  v.barcode,
+  v.reorder_level,
+  v.selling_price,
+  v.cost_price,
+  coalesce(sum(sm.quantity), 0) as quantity_on_hand,
+  case
+    when coalesce(sum(sm.quantity), 0) <= 0 then 'out_of_stock'
+    when coalesce(sum(sm.quantity), 0) <= v.reorder_level then 'low_stock'
+    else 'in_stock'
+  end as status
+from product_variants v
+join products p on p.id = v.product_id
+left join stock_movements sm on sm.variant_id = v.id
+where v.is_active = true and p.is_active = true and p.has_variants = true
+group by v.id, v.product_id, v.business_id, p.name, v.name, v.sku, v.barcode, v.reorder_level, v.selling_price, v.cost_price;
 
 -- ------------------------------------------------------------
 -- Row Level Security — every table is locked to the owner's
@@ -130,6 +186,7 @@ alter table businesses enable row level security;
 alter table staff_users enable row level security;
 alter table categories enable row level security;
 alter table products enable row level security;
+alter table product_variants enable row level security;
 alter table stock_movements enable row level security;
 alter table sales enable row level security;
 alter table sale_items enable row level security;
@@ -145,6 +202,9 @@ create policy "owner_full_access" on categories
   for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
 
 create policy "owner_full_access" on products
+  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
+
+create policy "owner_full_access" on product_variants
   for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
 
 create policy "owner_full_access" on stock_movements

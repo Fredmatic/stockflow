@@ -36,7 +36,7 @@ export default function Dashboard() {
       supabase.from('product_stock').select('*').eq('business_id', business.id),
       supabase
         .from('stock_movements')
-        .select('*, products(name)')
+        .select('*, products(name), product_variants(name)')
         .eq('business_id', business.id)
         .order('created_at', { ascending: false })
         .limit(8),
@@ -98,7 +98,7 @@ export default function Dashboard() {
         ) : (
           <div className="card divide-y divide-line">
             {[...outOfStock, ...lowStock].map((p) => (
-              <StockRow key={p.product_id} product={p} />
+              <StockRow key={p.variant_id || p.product_id} product={p} />
             ))}
           </div>
         )}
@@ -112,7 +112,10 @@ export default function Dashboard() {
             {recent.map((m) => (
               <div key={m.id} className="flex items-center justify-between px-4 py-3 text-sm">
                 <div>
-                  <span className="font-medium">{m.products?.name}</span>
+                  <span className="font-medium">
+                    {m.products?.name}
+                    {m.product_variants?.name ? ` — ${m.product_variants.name}` : ''}
+                  </span>
                   <span className="text-muted ml-2 text-xs uppercase tracking-wide">{m.type}</span>
                 </div>
                 <span className={`font-mono ${m.quantity < 0 ? 'text-brick' : 'text-brand-dark'}`}>
@@ -169,7 +172,10 @@ function StockRow({ product }) {
       <div className="flex items-center gap-2">
         <span className="status-dot" style={{ background: s.dot }} />
         <div>
-          <div className="text-sm font-medium">{product.name}</div>
+          <div className="text-sm font-medium">
+            {product.product_name}
+            {product.variant_name ? ` — ${product.variant_name}` : ''}
+          </div>
           <div className="text-xs text-muted">{s.label} · reorder at {product.reorder_level}</div>
         </div>
       </div>
