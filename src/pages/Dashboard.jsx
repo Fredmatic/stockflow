@@ -7,6 +7,7 @@ const ROUTE_LABELS = {
   '/products': 'Products',
   '/stock-in': 'Stock In',
   '/sales': 'Sales',
+  '/customers': 'Customers',
   '/expenses': 'Expenses',
   '/staff': 'Staff',
 }
@@ -17,6 +18,7 @@ export default function Dashboard() {
   const [stock, setStock] = useState([])
   const [recent, setRecent] = useState([])
   const [todaySales, setTodaySales] = useState({ total: 0, count: 0 })
+  const [totalOwed, setTotalOwed] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const canSeeRevenue = activeStaff?.role !== 'cashier'
@@ -32,7 +34,7 @@ export default function Dashboard() {
     const startOfToday = new Date()
     startOfToday.setHours(0, 0, 0, 0)
 
-    const [{ data: stockData }, { data: recentData }, { data: salesData }] = await Promise.all([
+    const [{ data: stockData }, { data: recentData }, { data: salesData }, { data: debtorsData }] = await Promise.all([
       supabase.from('product_stock').select('*').eq('business_id', business.id),
       supabase
         .from('stock_movements')
@@ -45,11 +47,13 @@ export default function Dashboard() {
         .select('total_amount')
         .eq('business_id', business.id)
         .gte('created_at', startOfToday.toISOString()),
+      supabase.from('debtor_summary').select('balance').eq('business_id', business.id),
     ])
     setStock(stockData || [])
     setRecent(recentData || [])
     const total = (salesData || []).reduce((sum, s) => sum + Number(s.total_amount), 0)
     setTodaySales({ total, count: (salesData || []).length })
+    setTotalOwed((debtorsData || []).reduce((sum, d) => sum + Math.max(0, Number(d.balance) || 0), 0))
     setLoading(false)
   }
 
@@ -73,17 +77,29 @@ export default function Dashboard() {
       )}
 
       {canSeeRevenue && (
-        <Link to="/sales" className="card p-4 flex items-center justify-between hover:bg-paper transition-colors">
-          <div>
-            <div className="text-xs text-muted mb-1">Today's sales</div>
-            <div className="font-mono text-2xl font-semibold text-brand-dark">
-              UGX {todaySales.total.toLocaleString()}
+        <div className="grid md:grid-cols-2 gap-3">
+          <Link to="/sales" className="card p-4 flex items-center justify-between hover:bg-paper transition-colors">
+            <div>
+              <div className="text-xs text-muted mb-1">Today's sales</div>
+              <div className="font-mono text-2xl font-semibold text-brand-dark">
+                UGX {todaySales.total.toLocaleString()}
+              </div>
+              <div className="text-xs text-muted mt-1">
+                {todaySales.count} sale{todaySales.count === 1 ? '' : 's'} so far · view full history →
+              </div>
             </div>
-            <div className="text-xs text-muted mt-1">
-              {todaySales.count} sale{todaySales.count === 1 ? '' : 's'} so far · view full history →
+          </Link>
+
+          <Link to="/customers" className="card p-4 flex items-center justify-between hover:bg-paper transition-colors">
+            <div>
+              <div className="text-xs text-muted mb-1">Owed to you</div>
+              <div className={`font-mono text-2xl font-semibold ${totalOwed > 0 ? 'text-brick' : 'text-brand-dark'}`}>
+                UGX {totalOwed.toLocaleString()}
+              </div>
+              <div className="text-xs text-muted mt-1">from customers buying on credit · manage →</div>
             </div>
-          </div>
-        </Link>
+          </Link>
+        </div>
       )}
 
       <div className="grid grid-cols-3 gap-3">

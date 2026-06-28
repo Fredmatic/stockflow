@@ -54,7 +54,7 @@ export default function Sales() {
     setLoading(true)
     let query = supabase
       .from('sales')
-      .select('*, staff_users(name), sale_items(id, quantity, unit_price, unit_cost, product_id, variant_id, products(name), product_variants(name))')
+      .select('*, staff_users(name), customers(name), sale_items(id, quantity, unit_price, unit_cost, product_id, variant_id, products(name), product_variants(name))')
       .eq('business_id', business.id)
       .order('created_at', { ascending: false })
 
@@ -191,6 +191,11 @@ export default function Sales() {
                           </div>
                           <div className="text-xs text-muted">
                             {s.staff_users?.name || 'Unknown staff'} · {itemCount} item{itemCount === 1 ? '' : 's'}
+                            {s.is_credit && (
+                              <span className="ml-2 text-brick bg-brick-light rounded-full px-2 py-0.5">
+                                Credit{s.customers?.name ? ` · ${s.customers.name}` : ''}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">

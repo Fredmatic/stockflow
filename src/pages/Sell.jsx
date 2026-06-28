@@ -23,6 +23,15 @@ export default function Sell() {
   const [scanning, setScanning] = useState(false)
   const [scanMessage, setScanMessage] = useState('')
 
+  const [paymentMethod, setPaymentMethod] = useState('cash') // 'cash' | 'credit'
+  const [customers, setCustomers] = useState([])
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [addingCustomer, setAddingCustomer] = useState(false)
+  const [newCustomerName, setNewCustomerName] = useState('')
+  const [newCustomerPhone, setNewCustomerPhone] = useState('')
+  const [customerBusy, setCustomerBusy] = useState(false)
+
   useEffect(() => {
     if (business) {
       supabase
@@ -30,8 +39,52 @@ export default function Sell() {
         .select('product_id, variant_id, product_name, variant_name, sku, barcode, selling_price, cost_price, quantity_on_hand')
         .eq('business_id', business.id)
         .then(({ data }) => setItems(data || []))
+      loadCustomers()
     }
   }, [business])
+
+  async function loadCustomers() {
+    const { data } = await supabase
+      .from('customers')
+      .select('id, name, phone')
+      .eq('business_id', business.id)
+      .eq('is_active', true)
+      .order('name')
+    setCustomers(data || [])
+  }
+
+  async function createCustomer() {
+    if (!newCustomerName.trim()) return
+    setCustomerBusy(true)
+    const { data, error: err } = await supabase
+      .from('customers')
+      .insert({ business_id: business.id, name: newCustomerName.trim(), phone: newCustomerPhone || null })
+      .select()
+      .single()
+    setCustomerBusy(false)
+    if (err) {
+      setMessage(`Error: ${err.message}`)
+      return
+    }
+    setCustomers((c) => [...c, data])
+    setSelectedCustomer(data)
+    setAddingCustomer(false)
+    setNewCustomerName('')
+    setNewCustomerPhone('')
+  }
+
+  const filteredCustomers = customers.filter((c) =>
+    c.name.toLowerCase().includes(customerSearch.toLowerCase())
+  )
+
+  function setPaymentMethodSafe(method) {
+    setPaymentMethod(method)
+    if (method === 'cash') {
+      setSelectedCustomer(null)
+      setCustomerSearch('')
+      setAddingCustomer(false)
+    }
+  }
 
   const filtered = items.filter((p) =>
     displayName(p).toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase())
@@ -116,11 +169,21 @@ export default function Sell() {
       setMessage(`Error: enter a price for ${displayName(missingPrice.item)} before completing the sale.`)
       return
     }
+    if (paymentMethod === 'credit' && !selectedCustomer) {
+      setMessage('Error: pick or add a customer for this credit sale.')
+      return
+    }
     setBusy(true)
     try {
       const { data: sale, error: saleError } = await supabase
         .from('sales')
-        .insert({ business_id: business.id, staff_user_id: activeStaff?.id || null, total_amount: total })
+        .insert({
+          business_id: business.id,
+          staff_user_id: activeStaff?.id || null,
+          total_amount: total,
+          is_credit: paymentMethod === 'credit',
+          customer_id: paymentMethod === 'credit' ? selectedCustomer.id : null,
+        })
         .select()
         .single()
       if (saleError) throw saleError
@@ -148,12 +211,30 @@ export default function Sell() {
       const { error: moveError } = await supabase.from('stock_movements').insert(movements)
       if (moveError) throw moveError
 
+      if (paymentMethod === 'credit') {
+        const { error: debtError } = await supabase.from('debt_transactions').insert({
+          business_id: business.id,
+          customer_id: selectedCustomer.id,
+          sale_id: sale.id,
+          type: 'credit_sale',
+          amount: total,
+          staff_user_id: activeStaff?.id || null,
+          note: 'Credit sale',
+        })
+        if (debtError) throw debtError
+      }
+
       setMessage(
-        canSeeProfit
-          ? `Sale completed — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
-          : `Sale completed — UGX ${total.toLocaleString()}`
+        paymentMethod === 'credit'
+          ? `Credit sale recorded for ${selectedCustomer.name} — UGX ${total.toLocaleString()}`
+          : canSeeProfit
+            ? `Sale completed — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
+            : `Sale completed — UGX ${total.toLocaleString()}`
       )
       setCart([])
+      setPaymentMethod('cash')
+      setSelectedCustomer(null)
+      setCustomerSearch('')
       setTimeout(() => setMessage(''), 4000)
     } catch (err) {
       setMessage(`Error: ${err.message}`)
@@ -270,6 +351,101 @@ export default function Sell() {
           </div>
         )}
 
+        {cart.length > 0 && (
+          <div className="mb-4">
+            <div className="text-xs font-medium text-muted mb-2">Payment</div>
+            <div className="flex gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMethodSafe('cash')}
+                className={`flex-1 ${paymentMethod === 'cash' ? 'btn-primary' : 'btn-secondary'}`}
+              >
+                Cash
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethodSafe('credit')}
+                className={`flex-1 ${paymentMethod === 'credit' ? 'btn-primary' : 'btn-secondary'}`}
+              >
+                Credit (pay later)
+              </button>
+            </div>
+
+            {paymentMethod === 'credit' && (
+              <div className="card p-3 space-y-2">
+                {selectedCustomer ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium">{selectedCustomer.name}</div>
+                      {selectedCustomer.phone && <div className="text-xs text-muted">{selectedCustomer.phone}</div>}
+                    </div>
+                    <button type="button" onClick={() => setSelectedCustomer(null)} className="text-xs text-muted">
+                      Change
+                    </button>
+                  </div>
+                ) : addingCustomer ? (
+                  <div className="space-y-2">
+                    <input
+                      autoFocus
+                      className="input"
+                      placeholder="Customer name"
+                      value={newCustomerName}
+                      onChange={(e) => setNewCustomerName(e.target.value)}
+                    />
+                    <input
+                      className="input"
+                      placeholder="Phone (optional)"
+                      value={newCustomerPhone}
+                      onChange={(e) => setNewCustomerPhone(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setAddingCustomer(false)} className="btn-secondary flex-1 text-sm">
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={createCustomer}
+                        disabled={customerBusy || !newCustomerName.trim()}
+                        className="btn-primary flex-1 text-sm"
+                      >
+                        {customerBusy ? 'Saving…' : 'Add customer'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      className="input"
+                      placeholder="Search customer…"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                    />
+                    <div className="max-h-32 overflow-y-auto">
+                      {filteredCustomers.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setSelectedCustomer(c)}
+                          className="w-full text-left text-sm px-2 py-1.5 hover:bg-paper rounded"
+                        >
+                          {c.name} {c.phone && <span className="text-muted text-xs">· {c.phone}</span>}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setAddingCustomer(true); setNewCustomerName(customerSearch) }}
+                      className="text-xs text-brand-dark font-medium"
+                    >
+                      + Add new customer
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className={`flex items-center justify-between px-1 ${canSeeProfit ? 'mb-1' : 'mb-4'}`}>
           <span className="text-sm font-medium">Total</span>
           <span className="font-mono text-lg font-semibold">UGX {total.toLocaleString()}</span>
@@ -281,8 +457,12 @@ export default function Sell() {
           </div>
         )}
 
-        <button onClick={completeSale} disabled={busy || cart.length === 0} className="btn-primary w-full">
-          {busy ? 'Completing…' : 'Complete sale'}
+        <button
+          onClick={completeSale}
+          disabled={busy || cart.length === 0 || (paymentMethod === 'credit' && !selectedCustomer)}
+          className="btn-primary w-full"
+        >
+          {busy ? 'Completing…' : paymentMethod === 'credit' ? 'Record credit sale' : 'Complete sale'}
         </button>
       </div>
 
