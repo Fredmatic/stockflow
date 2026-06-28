@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { canAccess } from '../lib/permissions'
@@ -30,13 +30,13 @@ export default function Layout() {
   // they've already told us (on this device) not to show it again. Computed
   // during render (not in an effect) so it's correct on the very first paint
   // after activeStaff changes, with no extra render cycle.
-  const lastCheckedStaffId = useRef(null)
   const [tutorialDismissedThisSession, setTutorialDismissedThisSession] = useState(false)
 
-  if (activeStaff?.id !== lastCheckedStaffId.current) {
-    lastCheckedStaffId.current = activeStaff?.id ?? null
+  // Reset dismissal when staff changes. Must be useEffect — calling setState
+  // conditionally during render causes React error #301.
+  useEffect(() => {
     setTutorialDismissedThisSession(false)
-  }
+  }, [activeStaff?.id])
 
   const showTutorial = !!activeStaff && !tutorialDismissedThisSession && !hasTutorialBeenDismissed(activeStaff.id)
 
