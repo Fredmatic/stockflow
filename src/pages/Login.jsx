@@ -22,6 +22,21 @@ export default function Login() {
       } else {
         const { data, error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
+
+        if (!data.session) {
+          // Email confirmation is required before there's an authenticated
+          // session — inserting the business row now would fail Row Level
+          // Security (it requires auth.uid() to match owner_auth_id), so
+          // there's nothing safe to do here except tell the person clearly
+          // what to do next, instead of silently leaving them with an
+          // account that has no business attached to it.
+          setError(
+            'Account created — check your email and click the confirmation link, then sign in. Your business will be set up the first time you sign in after confirming.'
+          )
+          setBusy(false)
+          return
+        }
+
         if (data.user) {
           const { error: bizError } = await supabase.from('businesses').insert({
             owner_auth_id: data.user.id,

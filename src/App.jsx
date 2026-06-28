@@ -14,17 +14,46 @@ import Staff from './pages/Staff'
 import Expenses from './pages/Expenses'
 
 function Gate({ children }) {
-  const { session, business, activeStaff, loading } = useAuth()
+  const { session, business, businessLoading, businessError, activeStaff, loading, signOut } = useAuth()
   const location = useLocation()
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Loading…</div>
   if (!session) return <Login />
-  if (!business) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Setting up your business…</div>
+  if (businessLoading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Setting up your business…</div>
+  if (!business) return <NoBusinessScreen error={businessError} onSignOut={signOut} />
   // Allow reaching the Staff page even before anyone has picked an active
   // staff member — the owner needs this to add their team in the first place.
   if (!activeStaff && location.pathname !== '/staff') return <StaffPicker />
   return children
 }
+
+// Shown when someone is genuinely signed in but has no business linked to
+// their account — most commonly because they signed up, but never clicked
+// the email confirmation link before the business row could be created
+// (Row Level Security blocks the insert until there's a real session).
+// Previously this state looked identical to "still loading", leaving people
+// stuck on a spinner forever with no way out.
+function NoBusinessScreen({ error, onSignOut }) {
+  const isMissingBusiness = error === 'NO_BUSINESS'
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="max-w-sm text-center space-y-4">
+        <h1 className="font-display text-lg font-semibold">
+          {isMissingBusiness ? "We can't find a business on this account" : 'Something went wrong'}
+        </h1>
+        <p className="text-sm text-muted">
+          {isMissingBusiness
+            ? "This usually happens if you signed up but didn't finish confirming your email before trying to log in. Check your inbox for a confirmation link, then sign in again — or sign up again with the same email if you've already confirmed."
+            : `We couldn't load your business: ${error}. Check your connection and try signing in again.`}
+        </p>
+        <button onClick={onSignOut} className="btn-primary w-full">
+          Sign out and try again
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Restricted({ path, children }) {
   const { activeStaff } = useAuth()
   if (path === '/staff' && !activeStaff) return children

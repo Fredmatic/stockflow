@@ -6,6 +6,8 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [business, setBusiness] = useState(null)
+  const [businessLoading, setBusinessLoading] = useState(false)
+  const [businessError, setBusinessError] = useState(null)
   const [activeStaff, setActiveStaff] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -29,16 +31,42 @@ export function AuthProvider({ children }) {
   // active staff/cashier pick from this browser tab's session.
   useEffect(() => {
     if (!session) return
-    supabase
-      .from('businesses')
-      .select('*')
-      .eq('owner_auth_id', session.user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setBusiness(data)
-      })
+    let cancelled = false
+
+    async function loadBusiness() {
+      setBusinessLoading(true)
+      setBusinessError(null)
+      const { data, error } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('owner_auth_id', session.user.id)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      if (error) {
+        // A real failure (network, RLS, etc) — surface it instead of
+        // leaving the person stuck on a loading screen forever.
+        setBusinessError(error.message)
+      } else if (!data) {
+        // The request succeeded but no business is linked to this
+        // account — most commonly because signup's email confirmation
+        // step was never completed, so the business row never got
+        // created. Distinct from a real error: nothing is broken, the
+        // person just needs to finish setting up.
+        setBusinessError('NO_BUSINESS')
+      }
+      setBusiness(data)
+      setBusinessLoading(false)
+    }
+
+    loadBusiness()
     const saved = sessionStorage.getItem('stockflow_active_staff')
     if (saved) setActiveStaff(JSON.parse(saved))
+
+    return () => {
+      cancelled = true
+    }
   }, [session])
 
   function chooseStaff(staff) {
@@ -57,7 +85,18 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, business, setBusiness, activeStaff, chooseStaff, switchUser, signOut, loading }}
+      value={{
+        session,
+        business,
+        setBusiness,
+        businessLoading,
+        businessError,
+        activeStaff,
+        chooseStaff,
+        switchUser,
+        signOut,
+        loading,
+      }}
     >
       {children}
     </AuthContext.Provider>
