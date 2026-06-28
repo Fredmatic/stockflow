@@ -43,7 +43,7 @@ export default function Login() {
             name: businessName,
             type: businessType,
           })
-          if (bizError) throw bizError
+          if (bizError) throw new Error('Business setup failed: ' + bizError.message)
         }
       }
     } catch (err) {
