@@ -59,7 +59,7 @@ export default function Calculator({ onClose }) {
       setStored(display)
     }
     setOperator(op)
-    setJustEvaluated(false)
+    setJustEvaluated(true)
   }
 
   function evaluate() {
