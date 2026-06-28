@@ -21,7 +21,12 @@ export default function Login() {
         if (error) throw error
       } else {
         const { data, error } = await supabase.auth.signUp({ email, password })
-        if (error) throw error
+        if (error) {
+          if (error.status === 422 || error.message?.toLowerCase().includes('already registered') || error.message?.toLowerCase().includes('user already')) {
+            throw new Error('This email is already registered. Please sign in instead, or use a different email.')
+          }
+          throw error
+        }
 
         if (!data.session) {
           // Email confirmation is required before there's an authenticated
@@ -43,7 +48,7 @@ export default function Login() {
             name: businessName,
             type: businessType,
           })
-          if (bizError) throw new Error('Business setup failed: ' + bizError.message)
+          if (bizError) throw bizError
         }
       }
     } catch (err) {

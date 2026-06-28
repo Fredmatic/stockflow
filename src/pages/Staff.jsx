@@ -50,6 +50,8 @@ export default function Staff() {
     load()
   }
 
+  if (!business) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Loading business…</div>
+
   return (
     <div className="max-w-md space-y-6">
       <div>
