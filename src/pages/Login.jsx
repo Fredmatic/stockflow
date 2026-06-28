@@ -88,6 +88,11 @@ export default function Login() {
                     <option value="retail">Retail shop</option>
                     <option value="electronics">Electronics / Phones</option>
                     <option value="supermarket">Supermarket</option>
+                    <option value="restaurant">Restaurant / Cafe</option>
+                    <option value="barbershop">Barbershop / Salon</option>
+                    <option value="clothing">Clothing / Fashion</option>
+                    <option value="wholesale">Wholesale / Distributor</option>
+                    <option value="other">Other</option>
                   </select>
                 </Field>
               </>
