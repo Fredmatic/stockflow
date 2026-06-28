@@ -172,6 +172,20 @@ function NewCustomerForm({ business, onClose, onSaved }) {
   const [openingBalance, setOpeningBalance] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const contactPickerSupported = typeof navigator !== 'undefined' && 'contacts' in navigator && 'ContactsManager' in window
+
+  async function pickFromContacts() {
+    try {
+      const contacts = await navigator.contacts.select(['name', 'tel'], { multiple: false })
+      if (contacts && contacts.length > 0) {
+        const contact = contacts[0]
+        if (contact.name && contact.name[0]) setName(contact.name[0])
+        if (contact.tel && contact.tel[0]) setPhone(contact.tel[0].replace(/\s+/g, ''))
+      }
+    } catch (err) {
+      // User cancelled or permission denied — silently ignore
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -213,7 +227,23 @@ function NewCustomerForm({ business, onClose, onSaved }) {
           </label>
           <label className="block">
             <span className="text-xs font-medium text-muted mb-1 block">Phone (optional)</span>
-            <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07xxxxxxxx" />
+            <div className="flex gap-2">
+              <input className="input flex-1" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07xxxxxxxx" />
+              {contactPickerSupported && (
+                <button
+                  type="button"
+                  onClick={pickFromContacts}
+                  title="Pick from contacts"
+                  className="btn-secondary px-3 flex items-center gap-1 text-sm shrink-0"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+                  Contacts
+                </button>
+              )}
+            </div>
           </label>
           <label className="block">
             <span className="text-xs font-medium text-muted mb-1 block">Already owes you (optional)</span>
