@@ -1,13 +1,51 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { canAccess } from '../lib/permissions'
+
+// Returns { days, overdue } relative to today
+function getDeadlineStatus(dueDateStr) {
+  if (!dueDateStr) return null
+  const due = new Date(dueDateStr)
+  due.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diffMs = due - today
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  return { days, overdue: days < 0 }
+}
+
+function DeadlineBadge({ customer }) {
+  const status = getDeadlineStatus(customer.payment_due_date)
+  if (!status || Number(customer.balance) <= 0) return null
+
+  if (status.overdue) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-white bg-brick rounded-full px-2 py-0.5">
+        ⚠ {Math.abs(status.days)}d overdue
+      </span>
+    )
+  }
+  if (status.days === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-white bg-amber-500 rounded-full px-2 py-0.5">
+        ⏰ Due today
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-dark bg-brand-light rounded-full px-2 py-0.5">
+      ⏱ {status.days}d left
+    </span>
+  )
+}
 
 export default function Customers() {
   const { business, activeStaff } = useAuth()
   const [customers, setCustomers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
-  const [selected, setSelected] = useState(null) // customer for detail/payment view
+  const [selected, setSelected] = useState(null)
 
   useEffect(() => {
     if (business) load()
@@ -20,12 +58,35 @@ export default function Customers() {
       .select('*')
       .eq('business_id', business.id)
       .order('balance', { ascending: false })
-    setCustomers(data || [])
+
+    // Fetch deadline fields separately since debtor_summary view may not include them
+    const ids = (data || []).map((c) => c.customer_id)
+    let deadlineMap = {}
+    if (ids.length > 0) {
+      const { data: cust } = await supabase
+        .from('customers')
+        .select('id, payment_due_date, penalty_amount, penalty_note')
+        .in('id', ids)
+      ;(cust || []).forEach((c) => {
+        deadlineMap[c.id] = c
+      })
+    }
+
+    const merged = (data || []).map((c) => ({
+      ...c,
+      ...(deadlineMap[c.customer_id] || {}),
+    }))
+
+    setCustomers(merged)
     setLoading(false)
   }
 
   const totalOwed = customers.reduce((sum, c) => sum + Math.max(0, Number(c.balance) || 0), 0)
   const debtorsCount = customers.filter((c) => Number(c.balance) > 0).length
+  const overdueCount = customers.filter((c) => {
+    const s = getDeadlineStatus(c.payment_due_date)
+    return s?.overdue && Number(c.balance) > 0
+  }).length
 
   return (
     <div className="space-y-6">
@@ -42,8 +103,11 @@ export default function Customers() {
           <div className="text-xs text-muted">Total owed to you</div>
           <div className="font-mono text-2xl font-semibold text-brick">UGX {totalOwed.toLocaleString()}</div>
         </div>
-        <div className="text-right text-xs text-muted">
-          {debtorsCount} customer{debtorsCount === 1 ? '' : 's'} with a balance
+        <div className="text-right text-xs text-muted space-y-1">
+          <div>{debtorsCount} customer{debtorsCount === 1 ? '' : 's'} with a balance</div>
+          {overdueCount > 0 && (
+            <div className="text-brick font-medium">⚠ {overdueCount} overdue</div>
+          )}
         </div>
       </div>
 
@@ -61,15 +125,19 @@ export default function Customers() {
               onClick={() => setSelected(c)}
               className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-paper"
             >
-              <div>
+              <div className="space-y-1">
                 <div className="text-sm font-medium">{c.name}</div>
                 <div className="text-xs text-muted">{c.phone || 'No phone saved'}</div>
+                <DeadlineBadge customer={c} />
               </div>
               <div className="text-right">
                 <div className={`font-mono text-sm ${Number(c.balance) > 0 ? 'text-brick' : 'text-brand-dark'}`}>
                   UGX {Number(c.balance).toLocaleString()}
                 </div>
                 <div className="text-xs text-muted">{Number(c.balance) > 0 ? 'owes' : 'settled'}</div>
+                {c.penalty_amount > 0 && Number(c.balance) > 0 && getDeadlineStatus(c.payment_due_date)?.overdue && (
+                  <div className="text-xs text-brick font-mono">+{Number(c.penalty_amount).toLocaleString()} penalty</div>
+                )}
               </div>
             </button>
           ))}
@@ -180,10 +248,16 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [balance, setBalance] = useState(Number(customer.balance) || 0)
+  const [showDeadlineForm, setShowDeadlineForm] = useState(false)
+  const [dueDate, setDueDate] = useState(customer.payment_due_date || '')
+  const [penaltyAmount, setPenaltyAmount] = useState(customer.penalty_amount || '')
+  const [penaltyNote, setPenaltyNote] = useState(customer.penalty_note || '')
+  const [deadlineBusy, setDeadlineBusy] = useState(false)
 
-  useEffect(() => {
-    load()
-  }, [])
+  const canManageDeadline = activeStaff?.role === 'owner' || activeStaff?.role === 'manager'
+  const deadlineStatus = getDeadlineStatus(dueDate)
+
+  useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
@@ -227,6 +301,41 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
     }
   }
 
+  async function saveDeadline(e) {
+    e.preventDefault()
+    setDeadlineBusy(true)
+    try {
+      const { error: err } = await supabase
+        .from('customers')
+        .update({
+          payment_due_date: dueDate || null,
+          penalty_amount: penaltyAmount ? Number(penaltyAmount) : null,
+          penalty_note: penaltyNote || null,
+        })
+        .eq('id', customer.customer_id)
+      if (err) throw err
+      setShowDeadlineForm(false)
+      onChanged()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setDeadlineBusy(false)
+    }
+  }
+
+  async function clearDeadline() {
+    if (!confirm('Remove payment deadline for this customer?')) return
+    await supabase.from('customers').update({
+      payment_due_date: null,
+      penalty_amount: null,
+      penalty_note: null,
+    }).eq('id', customer.customer_id)
+    setDueDate('')
+    setPenaltyAmount('')
+    setPenaltyNote('')
+    onChanged()
+  }
+
   return (
     <div className="fixed inset-0 bg-black/30 flex items-end md:items-center justify-center p-0 md:p-4 z-50">
       <div className="bg-paper-raised w-full md:max-w-md rounded-t-lg md:rounded-lg p-6 max-h-[90vh] overflow-y-auto">
@@ -236,6 +345,7 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
         </div>
         <p className="text-xs text-muted mb-4">{customer.phone || 'No phone saved'}</p>
 
+        {/* Balance */}
         <div className="card px-4 py-3 mb-4 flex items-center justify-between">
           <span className="text-sm text-muted">Current balance</span>
           <span className={`font-mono text-lg font-semibold ${balance > 0 ? 'text-brick' : 'text-brand-dark'}`}>
@@ -243,6 +353,107 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
           </span>
         </div>
 
+        {/* Deadline section */}
+        {balance > 0 && (
+          <div className="card px-4 py-3 mb-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted">Payment deadline</span>
+              {canManageDeadline && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowDeadlineForm((v) => !v)}
+                    className="text-xs text-brand-dark font-medium"
+                  >
+                    {dueDate ? 'Edit' : '+ Set deadline'}
+                  </button>
+                  {dueDate && (
+                    <button onClick={clearDeadline} className="text-xs text-muted">
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {dueDate ? (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">
+                    {new Date(dueDate).toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                  {deadlineStatus && (
+                    deadlineStatus.overdue ? (
+                      <span className="text-xs font-medium text-white bg-brick rounded-full px-2 py-0.5">
+                        ⚠ {Math.abs(deadlineStatus.days)} day{Math.abs(deadlineStatus.days) !== 1 ? 's' : ''} overdue
+                      </span>
+                    ) : deadlineStatus.days === 0 ? (
+                      <span className="text-xs font-medium text-white bg-amber-500 rounded-full px-2 py-0.5">
+                        ⏰ Due today!
+                      </span>
+                    ) : (
+                      <span className="text-xs font-medium text-brand-dark bg-brand-light rounded-full px-2 py-0.5">
+                        ⏱ {deadlineStatus.days} day{deadlineStatus.days !== 1 ? 's' : ''} remaining
+                      </span>
+                    )
+                  )}
+                </div>
+
+                {penaltyAmount > 0 && (
+                  <div className={`text-xs ${deadlineStatus?.overdue ? 'text-brick font-medium' : 'text-muted'}`}>
+                    Penalty: UGX {Number(penaltyAmount).toLocaleString()}
+                    {penaltyNote ? ` · ${penaltyNote}` : ''}
+                    {deadlineStatus?.overdue ? ' (NOW APPLICABLE)' : ' (if overdue)'}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted italic">No deadline set</p>
+            )}
+
+            {showDeadlineForm && canManageDeadline && (
+              <form onSubmit={saveDeadline} className="space-y-2 pt-2 border-t border-line mt-2">
+                <label className="block">
+                  <span className="text-xs font-medium text-muted mb-1 block">Promise-to-pay date</span>
+                  <input
+                    required
+                    type="date"
+                    className="input"
+                    value={dueDate}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setDueDate(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-muted mb-1 block">Penalty amount if overdue (UGX)</span>
+                  <input
+                    type="number" min="0"
+                    className="input font-mono"
+                    placeholder="e.g. 10000"
+                    value={penaltyAmount}
+                    onChange={(e) => setPenaltyAmount(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-muted mb-1 block">Penalty note (optional)</span>
+                  <input
+                    className="input"
+                    placeholder="e.g. Late fee agreed by customer"
+                    value={penaltyNote}
+                    onChange={(e) => setPenaltyNote(e.target.value)}
+                  />
+                </label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setShowDeadlineForm(false)} className="btn-secondary flex-1 text-sm">Cancel</button>
+                  <button type="submit" disabled={deadlineBusy} className="btn-primary flex-1 text-sm">
+                    {deadlineBusy ? 'Saving…' : 'Save deadline'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* Record payment */}
         <form onSubmit={recordPayment} className="space-y-2 mb-5">
           <div className="text-xs font-medium text-muted">Record a payment</div>
           <div className="flex gap-2">
@@ -266,6 +477,7 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
           {error && <p className="text-brick text-sm">{error}</p>}
         </form>
 
+        {/* History */}
         <div className="text-xs font-medium text-muted mb-2">History</div>
         {loading ? (
           <p className="text-sm text-muted">Loading…</p>

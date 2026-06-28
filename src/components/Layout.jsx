@@ -1,9 +1,10 @@
-import { useRef, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { canAccess } from '../lib/permissions'
 import { hasTutorialBeenDismissed } from '../lib/tutorialStorage'
 import TutorialPopup from './TutorialPopup'
+import { supabase } from '../lib/supabase'
 import Calculator from './Calculator'
 
 const NAV_ITEMS = [
@@ -41,6 +42,25 @@ export default function Layout() {
   const showTutorial = !!activeStaff && !tutorialDismissedThisSession && !hasTutorialBeenDismissed(activeStaff.id)
 
   const [showCalculator, setShowCalculator] = useState(false)
+  const [overdueCount, setOverdueCount] = useState(0)
+
+  useEffect(() => {
+    if (!business) return
+    async function checkOverdue() {
+      const today = new Date().toISOString().split('T')[0]
+      const { data } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('business_id', business.id)
+        .eq('is_active', true)
+        .lt('payment_due_date', today)
+        .not('payment_due_date', 'is', null)
+      setOverdueCount((data || []).length)
+    }
+    checkOverdue()
+    const interval = setInterval(checkOverdue, 60000)
+    return () => clearInterval(interval)
+  }, [business])
 
   return (
     <div className="min-h-screen flex">
@@ -91,6 +111,13 @@ export default function Layout() {
         </header>
 
         <main className="flex-1 p-4 md:p-8 pb-20 md:pb-8">
+          {overdueCount > 0 && (
+            <div className="mb-4 flex items-center gap-2 bg-brick/10 border border-brick/30 text-brick rounded-md px-4 py-2 text-sm font-medium">
+              <span>⚠</span>
+              <span>{overdueCount} customer{overdueCount !== 1 ? 's' : ''} past their payment deadline</span>
+              <a href="/customers" className="ml-auto underline text-xs">View</a>
+            </div>
+          )}
           <Outlet />
         </main>
 
