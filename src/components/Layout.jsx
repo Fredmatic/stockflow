@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { canAccess } from '../lib/permissions'
 import { hasTutorialBeenDismissed } from '../lib/tutorialStorage'
 import TutorialPopup from './TutorialPopup'
+import Calculator from './Calculator'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: '◧' },
@@ -37,6 +38,8 @@ export default function Layout() {
   }
 
   const showTutorial = !!activeStaff && !tutorialDismissedThisSession && !hasTutorialBeenDismissed(activeStaff.id)
+
+  const [showCalculator, setShowCalculator] = useState(false)
 
   return (
     <div className="min-h-screen flex">
@@ -108,6 +111,16 @@ export default function Layout() {
           ))}
         </nav>
       </div>
+
+      <button
+        onClick={() => setShowCalculator(true)}
+        aria-label="Open calculator"
+        className="fixed right-4 bottom-20 md:bottom-6 z-40 w-12 h-12 rounded-full bg-brand text-white shadow-lg flex items-center justify-center text-lg font-mono hover:bg-brand-dark"
+      >
+        ÷
+      </button>
+
+      {showCalculator && <Calculator onClose={() => setShowCalculator(false)} />}
 
       {showTutorial && (
         <TutorialPopup
