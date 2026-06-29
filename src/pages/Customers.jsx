@@ -228,7 +228,7 @@ function NewCustomerForm({ business, onClose, onSaved }) {
           <label className="block">
             <span className="text-xs font-medium text-muted mb-1 block">Phone (optional)</span>
             <div className="flex gap-2">
-              <input className="input flex-1" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07xxxxxxxx" />
+              <input className="input flex-1" type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07xxxxxxxx" />
               {contactPickerSupported && (
                 <button
                   type="button"

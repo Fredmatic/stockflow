@@ -3,6 +3,73 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
 
+// Suggested categories & field hints per business type
+const BUSINESS_TEMPLATES = {
+  electronics: {
+    categories: ['Phones', 'Phone Cases', 'Screen Protectors', 'Chargers', 'Earphones', 'Cables', 'Tablets', 'Laptops', 'Accessories'],
+    itemLabel: 'Product',
+    hasVariants: true,
+    variantLabel: 'Type (e.g. Black 128GB, White 256GB)',
+    showWarranty: true,
+    showExpiry: false,
+    showServiceDuration: false,
+  },
+  supermarket: {
+    categories: ['Beverages', 'Bread & Bakery', 'Dairy', 'Snacks', 'Cooking Oil', 'Rice & Posho', 'Soap & Detergents', 'Toiletries', 'Vegetables', 'Meat & Fish'],
+    itemLabel: 'Item',
+    hasVariants: false,
+    showWarranty: false,
+    showExpiry: true,
+    showServiceDuration: false,
+  },
+  restaurant: {
+    categories: ['Food', 'Drinks', 'Juices', 'Specials', 'Breakfast', 'Lunch', 'Dinner', 'Desserts', 'Sides'],
+    itemLabel: 'Menu item',
+    hasVariants: true,
+    variantLabel: 'Size / option (e.g. Small, Large)',
+    showWarranty: false,
+    showExpiry: false,
+    showServiceDuration: false,
+  },
+  barbershop: {
+    categories: ['Haircut', 'Shaving', 'Beard Trim', 'Hair Treatment', 'Braiding', 'Weave', 'Manicure', 'Pedicure', 'Retail Products'],
+    itemLabel: 'Service or product',
+    hasVariants: false,
+    showWarranty: false,
+    showExpiry: false,
+    showServiceDuration: true,
+  },
+  clothing: {
+    categories: ['T-Shirts', 'Trousers', 'Dresses', 'Shoes', 'Skirts', 'Jackets', 'Suits', 'Underwear', 'Kids Wear', 'Accessories'],
+    itemLabel: 'Item',
+    hasVariants: true,
+    variantLabel: 'Size / colour (e.g. L Blue, M Red)',
+    showWarranty: false,
+    showExpiry: false,
+    showServiceDuration: false,
+  },
+  wholesale: {
+    categories: ['Beverages', 'Cooking Oil', 'Grains & Flour', 'Soap & Cleaning', 'Sugar & Salt', 'Confectionery', 'Toiletries', 'Stationery'],
+    itemLabel: 'Item',
+    hasVariants: false,
+    showWarranty: false,
+    showExpiry: true,
+    showServiceDuration: false,
+  },
+  retail: {
+    categories: ['General', 'Food & Drink', 'Household', 'Electronics', 'Clothing', 'Stationery', 'Other'],
+    itemLabel: 'Product',
+    hasVariants: false,
+    showWarranty: false,
+    showExpiry: false,
+    showServiceDuration: false,
+  },
+}
+
+function getTemplate(type) {
+  return BUSINESS_TEMPLATES[type] || BUSINESS_TEMPLATES['retail']
+}
+
 export default function Products() {
   const { business } = useAuth()
   const [products, setProducts] = useState([])
@@ -69,7 +136,15 @@ export default function Products() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-xl font-semibold">Products</h1>
-          <p className="text-muted text-sm">{business?.type === 'electronics' ? 'Electronics & phones' : business?.type === 'supermarket' ? 'Supermarket items' : 'Retail items'}</p>
+          <p className="text-muted text-sm">
+            {business?.type === 'electronics' ? 'Phones, accessories & gadgets'
+            : business?.type === 'supermarket' ? 'Groceries & household items'
+            : business?.type === 'restaurant' ? 'Menu items & ingredients'
+            : business?.type === 'barbershop' ? 'Services & products'
+            : business?.type === 'clothing' ? 'Clothing & fashion items'
+            : business?.type === 'wholesale' ? 'Wholesale inventory'
+            : 'Your products & inventory'}
+          </p>
         </div>
         <button onClick={openNew} className="btn-primary">+ Add product</button>
       </div>
@@ -97,6 +172,11 @@ export default function Products() {
                     </span>
                   )}
                 </div>
+                {p.category && (
+                  <div className="text-xs text-muted mt-0.5">
+                    <span className="bg-paper border border-line rounded px-1.5 py-0.5">{p.category}</span>
+                  </div>
+                )}
                 <div className="text-xs text-muted">
                   {p.has_variants ? (
                     p.priceRange[0] === p.priceRange[1]
@@ -147,6 +227,10 @@ function tempId() {
 function ProductForm({ business, product, onClose, onSaved }) {
   const isElectronics = business?.type === 'electronics'
   const isSupermarket = business?.type === 'supermarket'
+  const isRestaurant = business?.type === 'restaurant'
+  const isBarbershop = business?.type === 'barbershop'
+  const isClothing = business?.type === 'clothing'
+  const isWholesale = business?.type === 'wholesale'
   const isEditing = !!product
 
   const [hasVariants, setHasVariants] = useState(product?.has_variants || false)
@@ -156,8 +240,11 @@ function ProductForm({ business, product, onClose, onSaved }) {
   ])
   const [loadingVariants, setLoadingVariants] = useState(isEditing && product?.has_variants)
 
+  const template = getTemplate(business?.type)
+
   const [form, setForm] = useState({
     name: product?.name || '',
+    category: product?.category || '',
     sku: product?.sku || '',
     barcode: product?.barcode || '',
     cost_price: product?.cost_price || '',
@@ -167,6 +254,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
     imei: product?.attributes?.imei || '',
     warranty_months: product?.attributes?.warranty_months || '',
     expiry_date: product?.attributes?.expiry_date || '',
+    service_duration_mins: product?.attributes?.service_duration_mins || '',
   })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -236,6 +324,9 @@ function ProductForm({ business, product, onClose, onSaved }) {
 
     setBusy(true)
     const attributes = {}
+    if (isBarbershop && form.service_duration_mins) {
+      attributes.service_duration_mins = Number(form.service_duration_mins)
+    }
     if (isElectronics) {
       if (form.imei) attributes.imei = form.imei
       if (form.warranty_months) attributes.warranty_months = Number(form.warranty_months)
@@ -245,6 +336,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
     const payload = {
       business_id: business.id,
       name: form.name,
+      category: form.category || null,
       sku: hasVariants ? null : (form.sku || null),
       barcode: hasVariants ? null : (form.barcode || null),
       cost_price: hasVariants ? 0 : (Number(form.cost_price) || 0),
@@ -362,8 +454,41 @@ function ProductForm({ business, product, onClose, onSaved }) {
       <div className="bg-paper-raised w-full md:max-w-md rounded-t-lg md:rounded-lg p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="font-display font-semibold mb-4">{product ? 'Edit product' : 'New product'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <Field label="Name">
-            <input required className="input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Screen Guard" />
+          <Field label={template.itemLabel + ' name'}>
+            <input required className="input" value={form.name} onChange={(e) => set('name', e.target.value)}
+              placeholder={
+                business?.type === 'electronics' ? 'e.g. Samsung A15, Screen Guard'
+                : business?.type === 'restaurant' ? 'e.g. Chicken & Chips, Passion Juice'
+                : business?.type === 'barbershop' ? 'e.g. Haircut, Beard Trim'
+                : business?.type === 'clothing' ? 'e.g. Polo Shirt, Skinny Jeans'
+                : business?.type === 'supermarket' || business?.type === 'wholesale' ? 'e.g. Cooking Oil 2L, Bread'
+                : 'e.g. Product name'
+              }
+            />
+          </Field>
+
+          <Field label="Category">
+            <div className="flex gap-2">
+              <select
+                className="input flex-1"
+                value={form.category}
+                onChange={(e) => set('category', e.target.value === '__custom__' ? '' : e.target.value)}
+              >
+                <option value="">— Select a category —</option>
+                {template.categories.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+                <option value="__custom__">+ Other (type below)</option>
+              </select>
+            </div>
+            {(form.category === '' || !template.categories.includes(form.category)) && (
+              <input
+                className="input mt-1"
+                placeholder="Type your own category"
+                value={form.category}
+                onChange={(e) => set('category', e.target.value)}
+              />
+            )}
           </Field>
 
           <label className="flex items-center gap-2 text-sm py-1">
@@ -504,6 +629,13 @@ function ProductForm({ business, product, onClose, onSaved }) {
                 + Add another type
               </button>
             </div>
+          )}
+
+          {isBarbershop && (
+            <Field label="Service duration (minutes, optional)">
+              <input type="number" min="0" step="5" className="input" value={form.service_duration_mins}
+                onChange={(e) => set('service_duration_mins', e.target.value)} placeholder="e.g. 30" />
+            </Field>
           )}
 
           {isElectronics && !hasVariants && (
