@@ -55,7 +55,7 @@ export default function Sales() {
     setLoading(true)
     let query = supabase
       .from('sales')
-      .select('*, staff_users(name), customers(name), sale_items(id, quantity, unit_price, unit_cost, product_id, variant_id, products(name), product_variants(name))')
+      .select('*, staff_users!sales_staff_user_id_fkey(name), customers(name), sale_items(id, quantity, unit_price, unit_cost, product_id, variant_id, products(name), product_variants(name))')
       .eq('business_id', business.id)
       .order('created_at', { ascending: false })
 
