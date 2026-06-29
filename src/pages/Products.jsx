@@ -236,7 +236,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
   const [hasVariants, setHasVariants] = useState(product?.has_variants || false)
   const [variants, setVariants] = useState([]) // existing variants, when editing
   const [newVariantRows, setNewVariantRows] = useState([
-    { key: tempId(), name: '', cost_price: '', selling_price: '', starting_quantity: '' },
+    { key: tempId(), name: '', sub_name: '', cost_price: '', selling_price: '', starting_quantity: '' },
   ])
   const [loadingVariants, setLoadingVariants] = useState(isEditing && product?.has_variants)
 
@@ -358,6 +358,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
               .from('product_variants')
               .update({
                 name: v.name,
+                sub_name: v.sub_name?.trim() || null,
                 cost_price: Number(v.cost_price) || 0,
                 selling_price: Number(v.selling_price) || 0,
                 reorder_level: Number(v.reorder_level) || 5,
@@ -375,7 +376,8 @@ function ProductForm({ business, product, onClose, onSaved }) {
               .insert({
                 product_id: product.id,
                 business_id: business.id,
-                name: r.name,
+                name: r.name.trim(),
+                sub_name: r.sub_name?.trim() || null,
                 cost_price: Number(r.cost_price) || 0,
                 selling_price: Number(r.selling_price) || 0,
               })
@@ -406,7 +408,8 @@ function ProductForm({ business, product, onClose, onSaved }) {
               .insert({
                 product_id: data.id,
                 business_id: business.id,
-                name: r.name,
+                name: r.name.trim(),
+                sub_name: r.sub_name?.trim() || null,
                 cost_price: Number(r.cost_price) || 0,
                 selling_price: Number(r.selling_price) || 0,
               })
@@ -500,7 +503,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
               className="w-4 h-4"
             />
             <span>
-              Has types/variants (e.g. Ceramic, Full Glue, Matte)
+              {isElectronics ? 'Has types & phone models (e.g. Ceramic → Samsung A15)' : 'Has types/variants (e.g. Size, Colour)'}
               {isEditing && <span className="text-muted text-xs"> — set when created</span>}
             </span>
           </label>
@@ -543,7 +546,9 @@ function ProductForm({ business, product, onClose, onSaved }) {
           {hasVariants && (
             <div className="space-y-3 pt-1">
               <div className="text-xs font-medium text-muted">
-                Types — each can have its own cost &amp; selling price (optional — leave blank to set the price manually at sale time)
+                {isElectronics
+                  ? 'Types (e.g. Ceramic, Full Glue) + phone model — each gets its own stock & price'
+                  : 'Types — each can have its own cost & selling price'}
               </div>
 
               {loadingVariants ? (
@@ -554,7 +559,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
                     <div className="flex items-center justify-between gap-2">
                       <input
                         className="input flex-1"
-                        placeholder="Type name e.g. Ceramic"
+                        placeholder="Type e.g. Ceramic, Full Glue, Matte"
                         value={v.name}
                         onChange={(e) => setExistingVariantField(v.id, 'name', e.target.value)}
                       />
@@ -562,6 +567,14 @@ function ProductForm({ business, product, onClose, onSaved }) {
                         Remove
                       </button>
                     </div>
+                    {isElectronics && (
+                      <input
+                        className="input text-sm"
+                        placeholder="Phone model e.g. Samsung A15, iPhone 14"
+                        value={v.sub_name || ''}
+                        onChange={(e) => setExistingVariantField(v.id, 'sub_name', e.target.value)}
+                      />
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                       <input
                         type="number" min="0"
@@ -590,7 +603,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
                   <div className="flex items-center justify-between gap-2">
                     <input
                       className="input flex-1"
-                      placeholder="Type name e.g. Ceramic"
+                      placeholder="Type e.g. Ceramic, Full Glue, Matte"
                       value={r.name}
                       onChange={(e) => setNewVariantField(r.key, 'name', e.target.value)}
                     />
@@ -600,6 +613,14 @@ function ProductForm({ business, product, onClose, onSaved }) {
                       </button>
                     )}
                   </div>
+                  {isElectronics && (
+                    <input
+                      className="input text-sm"
+                      placeholder="Phone model e.g. Samsung A15, iPhone 14"
+                      value={r.sub_name || ''}
+                      onChange={(e) => setNewVariantField(r.key, 'sub_name', e.target.value)}
+                    />
+                  )}
                   <div className="grid grid-cols-3 gap-2">
                     <input
                       type="number" min="0"

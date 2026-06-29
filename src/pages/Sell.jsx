@@ -8,7 +8,11 @@ function lineId(item) {
 }
 
 function displayName(item) {
-  return item.variant_name ? `${item.product_name} — ${item.variant_name}` : item.product_name
+  if (!item.variant_name) return item.product_name
+  const label = item.variant_sub_name
+    ? `${item.variant_name} → ${item.variant_sub_name}`
+    : item.variant_name
+  return `${item.product_name} — ${label}`
 }
 
 export default function Sell() {
