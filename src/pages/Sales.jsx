@@ -217,7 +217,13 @@ export default function Sales() {
 
           <ProductBreakdown products={productBreakdown} />
 
-          <Section title="History" subtitle={`${summary.count} sale${summary.count === 1 ? '' : 's'} in this range${summary.refundCount > 0 ? \` · ${summary.refundCount} refunded\` : ''}`}>
+          <Section
+            title="History"
+            subtitle={
+              summary.count + ' sale' + (summary.count === 1 ? '' : 's') + ' in this range' +
+              (summary.refundCount > 0 ? ' · ' + summary.refundCount + ' refunded' : '')
+            }
+          >
             {sales.length === 0 ? (
               <EmptyNote text="No sales in this range yet." />
             ) : (
