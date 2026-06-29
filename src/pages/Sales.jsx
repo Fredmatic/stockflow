@@ -63,7 +63,12 @@ export default function Sales() {
     if (from) query = query.gte('created_at', from.toISOString())
 
     const { data, error } = await query
-    if (!error) setSales(data || [])
+    if (error) {
+      console.error('Sales load error:', error)
+      setSales([])
+    } else {
+      setSales(data || [])
+    }
 
     if (canSeeNetProfit) {
       let expQuery = supabase.from('expenses').select('amount').eq('business_id', business.id)

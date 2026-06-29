@@ -67,7 +67,7 @@ export default function Layout() {
       {/* Sidebar — desktop */}
       <aside className="hidden md:flex w-56 flex-col border-r border-line bg-paper-raised">
         <div className="px-5 py-5 ledger-rule">
-          <div className="font-display font-semibold text-brand-dark">StockFlow</div>
+          <div className="font-display font-semibold text-brand-dark">StockTracer</div>
           <div className="text-xs text-muted mt-0.5 truncate">{business?.name}</div>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">
@@ -102,7 +102,7 @@ export default function Layout() {
       <div className="flex-1 flex flex-col">
         <header className="md:hidden sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-line bg-paper-raised">
           <div>
-            <div className="font-display font-semibold text-brand-dark text-sm">StockFlow</div>
+            <div className="font-display font-semibold text-brand-dark text-sm">StockTracer</div>
             <div className="text-xs text-muted">{business?.name}</div>
           </div>
           <button onClick={switchUser} className="text-xs text-brand-dark font-medium">

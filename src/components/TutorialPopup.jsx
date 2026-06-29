@@ -5,7 +5,7 @@ import { dismissTutorialForever } from '../lib/tutorialStorage'
 const STEPS = [
   {
     route: null,
-    title: 'Welcome to StockFlow',
+    title: 'Welcome to StockTracer',
     body: "Here's a quick look at how everything fits together — takes about a minute.",
     icon: '👋',
   },

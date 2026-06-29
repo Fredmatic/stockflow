@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'stockflow_tutorial_dismissed'
+const STORAGE_KEY = 'stocktracer_tutorial_dismissed'
 
 // Returns true if this specific staff member has permanently dismissed the
 // tutorial before. Stored in localStorage (not sessionStorage) so the choice

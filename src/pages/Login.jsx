@@ -62,7 +62,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="font-display text-2xl font-semibold text-brand-dark">StockTracker</div>
+          <div className="font-display text-2xl font-semibold text-brand-dark">StockTracer</div>
           <p className="text-muted text-sm mt-1">We aim to maximize profits by preventing stockouts while minimizing excess stock that drains cash flow.
           </p>
         </div>

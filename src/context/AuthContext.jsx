@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
       if (!newSession) {
         setBusiness(null)
         setActiveStaff(null)
-        sessionStorage.removeItem('stockflow_active_staff')
+        sessionStorage.removeItem('stocktracer_active_staff')
       }
     })
     return () => listener.subscription.unsubscribe()
@@ -61,7 +61,7 @@ export function AuthProvider({ children }) {
     }
 
     loadBusiness()
-    const saved = sessionStorage.getItem('stockflow_active_staff')
+    const saved = sessionStorage.getItem('stocktracer_active_staff')
     if (saved) setActiveStaff(JSON.parse(saved))
 
     return () => {
@@ -71,12 +71,12 @@ export function AuthProvider({ children }) {
 
   function chooseStaff(staff) {
     setActiveStaff(staff)
-    sessionStorage.setItem('stockflow_active_staff', JSON.stringify(staff))
+    sessionStorage.setItem('stocktracer_active_staff', JSON.stringify(staff))
   }
 
   function switchUser() {
     setActiveStaff(null)
-    sessionStorage.removeItem('stockflow_active_staff')
+    sessionStorage.removeItem('stocktracer_active_staff')
   }
 
   async function signOut() {
