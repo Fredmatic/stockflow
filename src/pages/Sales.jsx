@@ -44,6 +44,7 @@ export default function Sales() {
   const [expanded, setExpanded] = useState(null)
 
   const canSeeNetProfit = activeStaff?.role === 'owner'
+  const canRefund = activeStaff?.role === 'owner' || activeStaff?.role === 'manager'
 
   useEffect(() => {
     if (!business) return
@@ -75,12 +76,13 @@ export default function Sales() {
   }
 
   const summary = useMemo(() => {
-    const totalRevenue = sales.reduce((sum, s) => sum + Number(s.total_amount), 0)
-    const totalItems = sales.reduce(
+    const activeSales = sales.filter((s) => !s.is_refunded)
+    const totalRevenue = activeSales.reduce((sum, s) => sum + Number(s.total_amount), 0)
+    const totalItems = activeSales.reduce(
       (sum, s) => sum + (s.sale_items || []).reduce((isum, i) => isum + i.quantity, 0),
       0
     )
-    const totalProfit = sales.reduce(
+    const totalProfit = activeSales.reduce(
       (sum, s) =>
         sum +
         (s.sale_items || []).reduce(
@@ -89,7 +91,8 @@ export default function Sales() {
         ),
       0
     )
-    return { totalRevenue, totalItems, totalProfit, count: sales.length }
+    const refundCount = sales.filter((s) => s.is_refunded).length
+    return { totalRevenue, totalItems, totalProfit, count: activeSales.length, refundCount }
   }, [sales])
 
   const productBreakdown = useMemo(() => {
@@ -114,6 +117,52 @@ export default function Sales() {
       (sum, i) => sum + i.quantity * (Number(i.unit_price) - Number(i.unit_cost || 0)),
       0
     )
+  }
+
+  async function refundSale(sale) {
+    if (!confirm(`Refund this sale of UGX ${Number(sale.total_amount).toLocaleString()}? Stock will be added back.`)) return
+    const note = window.prompt('Reason for refund (optional):') ?? ''
+    try {
+      // 1. Mark sale as refunded
+      const { error: sErr } = await supabase
+        .from('sales')
+        .update({
+          is_refunded: true,
+          refunded_at: new Date().toISOString(),
+          refund_note: note || null,
+          refunded_by: activeStaff?.id || null,
+        })
+        .eq('id', sale.id)
+      if (sErr) throw sErr
+
+      // 2. Reverse stock for each item
+      for (const item of sale.sale_items || []) {
+        await supabase.from('stock_movements').insert({
+          product_id: item.product_id,
+          variant_id: item.variant_id || null,
+          business_id: business.id,
+          type: 'return',
+          quantity: item.quantity,
+          note: `Refund of sale ${sale.id.slice(0, 8)}${note ? ' · ' + note : ''}`,
+          staff_user_id: activeStaff?.id || null,
+        })
+      }
+
+      // 3. If credit sale — reverse the debt transaction
+      if (sale.is_credit && sale.customer_id) {
+        await supabase.from('debt_transactions').insert({
+          business_id: business.id,
+          customer_id: sale.customer_id,
+          type: 'payment',
+          amount: Number(sale.total_amount),
+          note: `Refund · ${note || 'sale reversed'}`,
+        })
+      }
+
+      await load()
+    } catch (err) {
+      alert('Refund failed: ' + err.message)
+    }
   }
 
   return (
@@ -168,7 +217,7 @@ export default function Sales() {
 
           <ProductBreakdown products={productBreakdown} />
 
-          <Section title="History" subtitle={`${summary.count} sale${summary.count === 1 ? '' : 's'} in this range`}>
+          <Section title="History" subtitle={`${summary.count} sale${summary.count === 1 ? '' : 's'} in this range${summary.refundCount > 0 ? \` · ${summary.refundCount} refunded\` : ''}`}>
             {sales.length === 0 ? (
               <EmptyNote text="No sales in this range yet." />
             ) : (
@@ -177,7 +226,7 @@ export default function Sales() {
                   const isOpen = expanded === s.id
                   const itemCount = (s.sale_items || []).reduce((sum, i) => sum + i.quantity, 0)
                   return (
-                    <div key={s.id}>
+                    <div key={s.id} className={s.is_refunded ? "opacity-50" : ""}>
                       <button
                         onClick={() => setExpanded(isOpen ? null : s.id)}
                         className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-paper"
@@ -196,6 +245,11 @@ export default function Sales() {
                                 Credit{s.customers?.name ? ` · ${s.customers.name}` : ''}
                               </span>
                             )}
+                            {s.is_refunded && (
+                              <span className="ml-2 text-white bg-gray-400 rounded-full px-2 py-0.5">
+                                Refunded
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">
@@ -208,7 +262,7 @@ export default function Sales() {
                         </div>
                       </button>
                       {isOpen && (
-                        <div className="px-4 pb-3 -mt-1 space-y-1 bg-paper">
+                        <div className="px-4 pb-4 -mt-1 space-y-1 bg-paper">
                           {(s.sale_items || []).map((item) => {
                             const itemProfit = item.quantity * (Number(item.unit_price) - Number(item.unit_cost || 0))
                             return (
@@ -223,6 +277,27 @@ export default function Sales() {
                               </div>
                             )
                           })}
+
+                          {s.is_refunded ? (
+                            <div className="mt-3 pt-2 border-t border-line text-xs text-muted">
+                              <span className="font-medium text-gray-500">Refunded</span>
+                              {s.refunded_at && (
+                                <span className="ml-2">
+                                  {new Date(s.refunded_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                                </span>
+                              )}
+                              {s.refund_note && <span className="ml-2">· {s.refund_note}</span>}
+                            </div>
+                          ) : canRefund ? (
+                            <div className="mt-3 pt-2 border-t border-line">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); refundSale(s) }}
+                                className="text-xs font-medium text-brick border border-brick/30 rounded-md px-3 py-1.5 hover:bg-brick/5"
+                              >
+                                ↩ Refund this sale
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     </div>
