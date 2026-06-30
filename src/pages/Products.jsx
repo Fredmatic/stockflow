@@ -163,7 +163,13 @@ export default function Products() {
               onClick={() => openEdit(p)}
               className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-paper"
             >
-              <div>
+              <div className="flex items-center gap-3 min-w-0">
+                {p.image_url ? (
+                  <img src={p.image_url} alt="" className="w-10 h-10 rounded-md object-cover border border-line shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-md bg-paper border border-line shrink-0" />
+                )}
+                <div className="min-w-0">
                 <div className="text-sm font-medium">
                   {p.name}
                   {p.has_variants && (
@@ -185,6 +191,7 @@ export default function Products() {
                   ) : (
                     <>{p.sku ? `SKU ${p.sku} · ` : ''}UGX {Number(p.selling_price).toLocaleString()}</>
                   )}
+                </div>
                 </div>
               </div>
               <div className="text-right">
@@ -224,6 +231,17 @@ function tempId() {
   return `tmp-${tempIdCounter}`
 }
 
+async function uploadProductImage(businessId, productId, file) {
+  const ext = file.name.split('.').pop() || 'jpg'
+  const path = `${businessId}/${productId}.${ext}`
+  const { error: uploadError } = await supabase.storage
+    .from('product-images')
+    .upload(path, file, { upsert: true, cacheControl: '3600' })
+  if (uploadError) throw uploadError
+  const { data } = supabase.storage.from('product-images').getPublicUrl(path)
+  return data.publicUrl + '?t=' + Date.now() // cache-bust so updated photos show immediately
+}
+
 function ProductForm({ business, product, onClose, onSaved }) {
   const isElectronics = business?.type === 'electronics'
   const isSupermarket = business?.type === 'supermarket'
@@ -258,6 +276,9 @@ function ProductForm({ business, product, onClose, onSaved }) {
   })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(product?.image_url || null)
+  const [removeImage, setRemoveImage] = useState(false)
   const [scanning, setScanning] = useState(false)
 
   useEffect(() => {
@@ -351,6 +372,13 @@ function ProductForm({ business, product, onClose, onSaved }) {
         const { error: err } = await supabase.from('products').update(payload).eq('id', product.id)
         if (err) throw err
 
+        if (imageFile) {
+          const url = await uploadProductImage(business.id, product.id, imageFile)
+          await supabase.from('products').update({ image_url: url }).eq('id', product.id)
+        } else if (removeImage) {
+          await supabase.from('products').update({ image_url: null }).eq('id', product.id)
+        }
+
         if (hasVariants) {
           // Save edits to existing variants.
           for (const v of variants) {
@@ -399,6 +427,11 @@ function ProductForm({ business, product, onClose, onSaved }) {
       } else {
         const { data, error: err } = await supabase.from('products').insert(payload).select().single()
         if (err) throw err
+
+        if (imageFile) {
+          const url = await uploadProductImage(business.id, data.id, imageFile)
+          await supabase.from('products').update({ image_url: url }).eq('id', data.id)
+        }
 
         if (hasVariants) {
           const cleanRows = newVariantRows.filter((r) => r.name.trim())
@@ -457,6 +490,20 @@ function ProductForm({ business, product, onClose, onSaved }) {
       <div className="bg-paper-raised w-full md:max-w-md rounded-t-lg md:rounded-lg p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="font-display font-semibold mb-4">{product ? 'Edit product' : 'New product'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
+          <ImagePicker
+            preview={imagePreview}
+            onPick={(file) => {
+              setImageFile(file)
+              setRemoveImage(false)
+              setImagePreview(URL.createObjectURL(file))
+            }}
+            onRemove={() => {
+              setImageFile(null)
+              setImagePreview(null)
+              setRemoveImage(true)
+            }}
+          />
+
           <Field label={template.itemLabel + ' name'}>
             <input required className="input" value={form.name} onChange={(e) => set('name', e.target.value)}
               placeholder={
@@ -697,6 +744,56 @@ function ProductForm({ business, product, onClose, onSaved }) {
           instructions="Point the camera at the product's barcode or QR code to fill it in automatically."
         />
       )}
+    </div>
+  )
+}
+
+function ImagePicker({ preview, onPick, onRemove }) {
+  function handleFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Photo is too large — please pick one under 8MB.')
+      return
+    }
+    onPick(file)
+    e.target.value = '' // allow re-picking the same file later
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      {preview ? (
+        <div className="relative w-20 h-20 shrink-0">
+          <img src={preview} alt="Product" className="w-20 h-20 rounded-md object-cover border border-line" />
+          <button
+            type="button"
+            onClick={onRemove}
+            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-brick text-white text-xs flex items-center justify-center"
+            aria-label="Remove photo"
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <div className="w-20 h-20 rounded-md border border-dashed border-line flex items-center justify-center text-muted shrink-0">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="12" cy="12" r="3.5" />
+            <path d="M8 5l1.2-2h5.6L16 5" />
+          </svg>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        <label className="btn-secondary text-xs px-3 py-1.5 cursor-pointer text-center">
+          {preview ? 'Retake photo' : '📷 Take photo'}
+          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
+        </label>
+        <label className="btn-secondary text-xs px-3 py-1.5 cursor-pointer text-center">
+          Choose from gallery
+          <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        </label>
+      </div>
     </div>
   )
 }

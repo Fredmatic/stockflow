@@ -117,6 +117,23 @@ export default function Sales() {
     return Object.values(byProduct).sort((a, b) => b.revenue - a.revenue)
   }, [sales])
 
+  const staffBreakdown = useMemo(() => {
+    const byStaff = {}
+    for (const s of sales) {
+      if (s.is_refunded) continue
+      const name = s.staff_users?.name || 'Unknown staff'
+      const key = s.staff_user_id || name
+      if (!byStaff[key]) {
+        byStaff[key] = { name, salesCount: 0, revenue: 0, profit: 0, itemsSold: 0 }
+      }
+      byStaff[key].salesCount += 1
+      byStaff[key].revenue += Number(s.total_amount)
+      byStaff[key].profit += saleProfit(s)
+      byStaff[key].itemsSold += (s.sale_items || []).reduce((sum, i) => sum + i.quantity, 0)
+    }
+    return Object.values(byStaff).sort((a, b) => b.revenue - a.revenue)
+  }, [sales])
+
   function saleProfit(s) {
     return (s.sale_items || []).reduce(
       (sum, i) => sum + i.quantity * (Number(i.unit_price) - Number(i.unit_cost || 0)),
@@ -218,6 +235,25 @@ export default function Sales() {
                 {`UGX ${summary.totalProfit.toLocaleString()} profit − UGX ${expensesTotal.toLocaleString()} expenses`}
               </div>
             </div>
+          )}
+
+          {canSeeNetProfit && staffBreakdown.length > 0 && (
+            <Section title="Sales by staff" subtitle="Who sold what in this range">
+              <div className="card divide-y divide-line">
+                {staffBreakdown.map((st) => (
+                  <div key={st.name} className="px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium">{st.name}</div>
+                      <div className="text-xs text-muted">{st.salesCount} sale{st.salesCount === 1 ? '' : 's'} · {st.itemsSold} items</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono text-sm font-semibold text-brand-dark">UGX {st.revenue.toLocaleString()}</div>
+                      <div className="text-xs text-amber">+{st.profit.toLocaleString()} profit</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
           )}
 
           <ProductBreakdown products={productBreakdown} />
