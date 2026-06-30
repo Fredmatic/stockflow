@@ -392,6 +392,25 @@ export default function Sell() {
       date: new Date(),
     }
 
+    // If we already know we're offline, don't waste time waiting on a
+    // network call that's guaranteed to fail — queue immediately so the
+    // cashier isn't left watching a spinner.
+    if (!navigator.onLine) {
+      const localId = enqueueSale(saleData)
+      setPendingCount(getQueue().length)
+      setMessage(
+        `📴 No connection — sale saved on this device and will sync automatically (UGX ${total.toLocaleString()}).`
+      )
+      setLastReceipt(receiptData)
+      setCart([])
+      setPaymentMethod('cash')
+      setSelectedCustomer(null)
+      setCustomerSearch('')
+      setBusy(false)
+      setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
+      return
+    }
+
     try {
       const { stockShortfalls } = await pushSaleToServer(business, saleData)
 
