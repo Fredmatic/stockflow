@@ -5,6 +5,7 @@ import { canAccess } from '../lib/permissions'
 import { hasTutorialBeenDismissed } from '../lib/tutorialStorage'
 import TutorialPopup from './TutorialPopup'
 import { supabase } from '../lib/supabase'
+import { queueCount } from '../lib/offlineQueue'
 import Calculator from './Calculator'
 
 const NAV_ITEMS = [
@@ -44,6 +45,13 @@ export default function Layout() {
   const [showCalculator, setShowCalculator] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [overdueCount, setOverdueCount] = useState(0)
+  const [pendingSales, setPendingSales] = useState(0)
+
+  useEffect(() => {
+    setPendingSales(queueCount())
+    const interval = setInterval(() => setPendingSales(queueCount()), 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (!business) return
@@ -140,6 +148,13 @@ export default function Layout() {
         </header>
 
         <main className="flex-1 p-4 md:p-8 pb-20 md:pb-8">
+          {pendingSales > 0 && (
+            <div className="mb-4 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-700 rounded-md px-4 py-2 text-sm font-medium">
+              <span>📴</span>
+              <span>{pendingSales} sale{pendingSales !== 1 ? 's' : ''} waiting to sync — keep this device connected to the internet</span>
+            </div>
+          )}
+
           {overdueCount > 0 && (
             <div className="mb-4 flex items-center gap-2 bg-brick/10 border border-brick/30 text-brick rounded-md px-4 py-2 text-sm font-medium">
               <span>⚠</span>

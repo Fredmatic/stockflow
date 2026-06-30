@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
+import { enqueueSale, getQueue, removeFromQueue } from '../lib/offlineQueue'
 
 function lineId(item) {
   return item.variant_id || item.product_id
@@ -42,6 +43,96 @@ function shareReceiptWhatsApp(receipt) {
   window.open(url, '_blank')
 }
 
+// Sends one queued/live sale to Supabase. Used both by completeSale() for a
+// live sale and by syncOfflineQueue() for queued ones — keeping this in one
+// place means the two paths can never drift apart.
+async function pushSaleToServer(business, saleData) {
+  // Stock check first: if items in this queued sale ran out on another
+  // device while we were offline, warn instead of silently overselling.
+  const productIds = saleData.items.filter((i) => !i.variant_id).map((i) => i.product_id)
+  const variantIds = saleData.items.filter((i) => i.variant_id).map((i) => i.variant_id)
+
+  let currentStock = []
+  if (productIds.length > 0) {
+    const { data } = await supabase
+      .from('product_stock')
+      .select('product_id, variant_id, quantity_on_hand')
+      .eq('business_id', business.id)
+      .is('variant_id', null)
+      .in('product_id', productIds)
+    currentStock = currentStock.concat(data || [])
+  }
+  if (variantIds.length > 0) {
+    const { data } = await supabase
+      .from('product_stock')
+      .select('product_id, variant_id, quantity_on_hand')
+      .eq('business_id', business.id)
+      .in('variant_id', variantIds)
+    currentStock = currentStock.concat(data || [])
+  }
+
+  const stockShortfalls = []
+  for (const item of saleData.items) {
+    const key = item.variant_id || item.product_id
+    const stockRow = currentStock.find((s) => (s.variant_id || s.product_id) === key)
+    const available = stockRow?.quantity_on_hand ?? 0
+    if (available < item.quantity) {
+      stockShortfalls.push({ name: item.displayName, available, needed: item.quantity })
+    }
+  }
+
+  const { data: sale, error: saleError } = await supabase
+    .from('sales')
+    .insert({
+      business_id: business.id,
+      staff_user_id: saleData.staff_user_id,
+      total_amount: saleData.total,
+      is_credit: saleData.is_credit,
+      customer_id: saleData.customer_id,
+    })
+    .select()
+    .single()
+  if (saleError) throw saleError
+
+  const saleItems = saleData.items.map((i) => ({
+    sale_id: sale.id,
+    product_id: i.product_id,
+    variant_id: i.variant_id || null,
+    quantity: i.quantity,
+    unit_price: i.unit_price,
+    unit_cost: i.unit_cost || 0,
+  }))
+  const { error: itemsError } = await supabase.from('sale_items').insert(saleItems)
+  if (itemsError) throw itemsError
+
+  const movements = saleData.items.map((i) => ({
+    product_id: i.product_id,
+    variant_id: i.variant_id || null,
+    business_id: business.id,
+    type: 'sale',
+    quantity: -i.quantity,
+    staff_user_id: saleData.staff_user_id,
+    note: `Sale ${sale.id}${saleData.queuedOffline ? ' (synced from offline)' : ''}`,
+  }))
+  const { error: moveError } = await supabase.from('stock_movements').insert(movements)
+  if (moveError) throw moveError
+
+  if (saleData.is_credit) {
+    const { error: debtError } = await supabase.from('debt_transactions').insert({
+      business_id: business.id,
+      customer_id: saleData.customer_id,
+      sale_id: sale.id,
+      type: 'credit_sale',
+      amount: saleData.total,
+      staff_user_id: saleData.staff_user_id,
+      note: 'Credit sale',
+    })
+    if (debtError) throw debtError
+  }
+
+  return { sale, stockShortfalls }
+}
+
 export default function Sell() {
   const { business, activeStaff } = useAuth()
   const [items, setItems] = useState([])
@@ -50,6 +141,9 @@ export default function Sell() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [lastReceipt, setLastReceipt] = useState(null)
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
+  const [pendingCount, setPendingCount] = useState(0)
+  const [syncing, setSyncing] = useState(false)
 
   const canSeeProfit = activeStaff?.role === 'owner'
   const [scanning, setScanning] = useState(false)
@@ -74,6 +168,69 @@ export default function Sell() {
       loadCustomers()
     }
   }, [business])
+
+  // Track connection status and the queued-sale count, and auto-sync the
+  // moment we come back online. The browser's online/offline events aren't
+  // perfectly reliable (a phone can report "online" while actually having
+  // no usable signal), so syncOfflineQueue() below treats any request
+  // failure as "still offline" rather than trusting this flag blindly.
+  useEffect(() => {
+    setPendingCount(getQueue().length)
+
+    function handleOnline() {
+      setIsOnline(true)
+      syncOfflineQueue()
+    }
+    function handleOffline() {
+      setIsOnline(false)
+    }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    // Also try syncing once on page load, in case sales were queued during
+    // a previous visit and the device is already back online.
+    if (navigator.onLine) syncOfflineQueue()
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [business])
+
+  async function syncOfflineQueue() {
+    if (!business || syncing) return
+    const queue = getQueue()
+    if (queue.length === 0) return
+    setSyncing(true)
+    const shortfallMessages = []
+    for (const entry of queue) {
+      try {
+        const { stockShortfalls } = await pushSaleToServer(business, entry.saleData)
+        removeFromQueue(entry.localId)
+        if (stockShortfalls.length > 0) {
+          shortfallMessages.push(
+            ...stockShortfalls.map(
+              (s) => `${s.name}: only ${s.available} left but ${s.needed} were sold offline — please check stock.`
+            )
+          )
+        }
+      } catch (err) {
+        // Network still bad, or a genuine server error — stop here and
+        // retry the rest next time we're back online. Leaving the
+        // remaining entries in the queue means nothing is lost.
+        console.error('Offline sale sync failed, will retry later:', err)
+        break
+      }
+    }
+    setPendingCount(getQueue().length)
+    setSyncing(false)
+    if (shortfallMessages.length > 0) {
+      setMessage(`⚠ Synced, but please check stock: ${shortfallMessages.join(' ')}`)
+    } else if (queue.length > getQueue().length) {
+      setMessage(`✓ Synced ${queue.length - getQueue().length} offline sale${queue.length - getQueue().length === 1 ? '' : 's'}.`)
+      setTimeout(() => setMessage(''), 5000)
+    }
+  }
 
   async function loadCustomers() {
     const { data } = await supabase
@@ -206,82 +363,72 @@ export default function Sell() {
       return
     }
     setBusy(true)
-    try {
-      const { data: sale, error: saleError } = await supabase
-        .from('sales')
-        .insert({
-          business_id: business.id,
-          staff_user_id: activeStaff?.id || null,
-          total_amount: total,
-          is_credit: paymentMethod === 'credit',
-          customer_id: paymentMethod === 'credit' ? selectedCustomer.id : null,
-        })
-        .select()
-        .single()
-      if (saleError) throw saleError
 
-      const saleItems = cart.map((i) => ({
-        sale_id: sale.id,
+    const saleData = {
+      staff_user_id: activeStaff?.id || null,
+      total: total,
+      is_credit: paymentMethod === 'credit',
+      customer_id: paymentMethod === 'credit' ? selectedCustomer.id : null,
+      items: cart.map((i) => ({
         product_id: i.item.product_id,
         variant_id: i.item.variant_id || null,
+        displayName: displayName(i.item),
         quantity: i.quantity,
         unit_price: unitPriceFor(i),
         unit_cost: i.item.cost_price || 0,
-      }))
-      const { error: itemsError } = await supabase.from('sale_items').insert(saleItems)
-      if (itemsError) throw itemsError
+      })),
+    }
 
-      const movements = cart.map((i) => ({
-        product_id: i.item.product_id,
-        variant_id: i.item.variant_id || null,
-        business_id: business.id,
-        type: 'sale',
-        quantity: -i.quantity,
-        staff_user_id: activeStaff?.id || null,
-        note: `Sale ${sale.id}`,
-      }))
-      const { error: moveError } = await supabase.from('stock_movements').insert(movements)
-      if (moveError) throw moveError
+    const receiptData = {
+      businessName: business?.name || 'Shop',
+      items: cart.map((i) => ({
+        name: displayName(i.item),
+        quantity: i.quantity,
+        unitPrice: unitPriceFor(i),
+      })),
+      total,
+      paymentMethod,
+      customerName: paymentMethod === 'credit' ? selectedCustomer.name : null,
+      date: new Date(),
+    }
 
-      if (paymentMethod === 'credit') {
-        const { error: debtError } = await supabase.from('debt_transactions').insert({
-          business_id: business.id,
-          customer_id: selectedCustomer.id,
-          sale_id: sale.id,
-          type: 'credit_sale',
-          amount: total,
-          staff_user_id: activeStaff?.id || null,
-          note: 'Credit sale',
-        })
-        if (debtError) throw debtError
+    try {
+      const { stockShortfalls } = await pushSaleToServer(business, saleData)
+
+      if (stockShortfalls.length > 0) {
+        setMessage(`⚠ Sale completed, but stock may be short: ${stockShortfalls.map((s) => s.name).join(', ')}.`)
+      } else {
+        setMessage(
+          paymentMethod === 'credit'
+            ? `Credit sale recorded for ${selectedCustomer.name} — UGX ${total.toLocaleString()}`
+            : canSeeProfit
+              ? `Sale completed — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
+              : `Sale completed — UGX ${total.toLocaleString()}`
+        )
       }
-
-      setMessage(
-        paymentMethod === 'credit'
-          ? `Credit sale recorded for ${selectedCustomer.name} — UGX ${total.toLocaleString()}`
-          : canSeeProfit
-            ? `Sale completed — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
-            : `Sale completed — UGX ${total.toLocaleString()}`
-      )
-      setLastReceipt({
-        businessName: business?.name || 'Shop',
-        items: cart.map((i) => ({
-          name: displayName(i.item),
-          quantity: i.quantity,
-          unitPrice: unitPriceFor(i),
-        })),
-        total,
-        paymentMethod,
-        customerName: paymentMethod === 'credit' ? selectedCustomer.name : null,
-        date: new Date(),
-      })
+      setLastReceipt(receiptData)
       setCart([])
       setPaymentMethod('cash')
       setSelectedCustomer(null)
       setCustomerSearch('')
       setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
     } catch (err) {
-      setMessage(`Error: ${err.message}`)
+      // Network failure (offline, or signal dropped mid-request) — queue the
+      // sale instead of losing it. A genuine server-side rejection (e.g. a
+      // database constraint) will also land here, but is rare enough that
+      // queuing-and-retrying is still the safer default than discarding a
+      // completed sale the cashier already collected money for.
+      const localId = enqueueSale(saleData)
+      setPendingCount(getQueue().length)
+      setMessage(
+        `📴 No connection — sale saved on this device and will sync automatically (UGX ${total.toLocaleString()}).`
+      )
+      setLastReceipt(receiptData)
+      setCart([])
+      setPaymentMethod('cash')
+      setSelectedCustomer(null)
+      setCustomerSearch('')
+      setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
     } finally {
       setBusy(false)
     }
@@ -289,6 +436,18 @@ export default function Sell() {
 
   return (
     <div className="grid md:grid-cols-2 gap-6">
+      {(!isOnline || pendingCount > 0) && (
+        <div className="md:col-span-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-700 rounded-md px-4 py-2 text-sm font-medium">
+          <span>{!isOnline ? '📴' : '🔄'}</span>
+          <span>
+            {!isOnline
+              ? `Offline${pendingCount > 0 ? ` — ${pendingCount} sale${pendingCount === 1 ? '' : 's'} waiting to sync` : ' — sales will be saved on this device'}`
+              : syncing
+                ? 'Syncing offline sales…'
+                : `${pendingCount} offline sale${pendingCount === 1 ? '' : 's'} waiting to sync`}
+          </span>
+        </div>
+      )}
       <div>
         <h1 className="font-display text-xl font-semibold mb-1">Sell</h1>
         <p className="text-muted text-sm mb-4">Tap a product to add it, or scan its code.</p>
