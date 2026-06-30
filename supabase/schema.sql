@@ -158,6 +158,38 @@ create table debt_transactions (
 create index on debt_transactions (customer_id, created_at desc);
 create index on debt_transactions (business_id);
 
+-- A lender who YOU owe money to (personal/business loans, advances, etc).
+-- Separate from `customers` (who owe the shop) and unrelated to stock
+-- suppliers. due_date is a self-reminder of when you intend to repay.
+create table lenders (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id) on delete cascade,
+  name text not null,
+  phone text,
+  note text,
+  due_date date,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create index on lenders (business_id);
+
+-- Every change to what you owe a lender is one row here: 'borrowed'
+-- (increases what you owe) or 'repayment' (decreases it).
+create table lender_transactions (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references businesses(id) on delete cascade,
+  lender_id uuid not null references lenders(id) on delete cascade,
+  type text not null check (type in ('borrowed', 'repayment')),
+  amount numeric(12,2) not null check (amount > 0),
+  note text,
+  staff_user_id uuid references staff_users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index on lender_transactions (lender_id, created_at desc);
+create index on lender_transactions (business_id);
+
 -- ------------------------------------------------------------
 -- View: current stock level per SELLABLE item (the heart of the app).
 -- A row is either a simple product, or one variant/type of a
@@ -230,6 +262,25 @@ where c.is_active = true
 group by c.id, c.business_id, c.name, c.phone, c.note;
 
 -- ------------------------------------------------------------
+-- View: one row per lender with the current balance (how much you
+-- still owe them) and when they last had any activity.
+-- ------------------------------------------------------------
+create view lender_summary as
+select
+  l.id as lender_id,
+  l.business_id,
+  l.name,
+  l.phone,
+  l.note,
+  l.due_date,
+  coalesce(sum(case when t.type = 'borrowed' then t.amount else -t.amount end), 0) as balance,
+  max(t.created_at) as last_activity
+from lenders l
+left join lender_transactions t on t.lender_id = l.id
+where l.is_active = true
+group by l.id, l.business_id, l.name, l.phone, l.note, l.due_date;
+
+-- ------------------------------------------------------------
 -- Row Level Security — every table is locked to the owner's
 -- Supabase Auth account. Staff/cashiers operate through the
 -- same logged-in session (the shared shop device).
@@ -245,6 +296,8 @@ alter table sales enable row level security;
 alter table sale_items enable row level security;
 alter table expenses enable row level security;
 alter table debt_transactions enable row level security;
+alter table lenders enable row level security;
+alter table lender_transactions enable row level security;
 
 create policy "owner_full_access" on businesses
   for all using (owner_auth_id = auth.uid());
@@ -281,4 +334,10 @@ create policy "owner_full_access" on customers
   for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
 
 create policy "owner_full_access" on debt_transactions
+  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
+
+create policy "owner_full_access" on lenders
+  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
+
+create policy "owner_full_access" on lender_transactions
   for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));

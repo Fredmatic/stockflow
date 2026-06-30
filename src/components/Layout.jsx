@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { to: '/sell', label: 'Sell', icon: '↑' },
   { to: '/sales', label: 'Sales', icon: '◫' },
   { to: '/customers', label: 'Customers', icon: '⊙' },
+  { to: '/lenders', label: 'People I Owe', icon: '◐' },
   { to: '/expenses', label: 'Expenses', icon: '−' },
   { to: '/staff', label: 'Staff', icon: '◍' },
 ]
@@ -48,6 +49,7 @@ export default function Layout() {
   const [showCalculator, setShowCalculator] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [overdueCount, setOverdueCount] = useState(0)
+  const [overdueLenderCount, setOverdueLenderCount] = useState(0)
   const [pendingSales, setPendingSales] = useState(0)
 
   useEffect(() => {
@@ -71,6 +73,23 @@ export default function Layout() {
     }
     checkOverdue()
     const interval = setInterval(checkOverdue, 60000)
+    return () => clearInterval(interval)
+  }, [business])
+
+  useEffect(() => {
+    if (!business) return
+    async function checkOverdueLenders() {
+      const today = new Date().toISOString().split('T')[0]
+      const { data } = await supabase
+        .from('lender_summary')
+        .select('lender_id, balance, due_date')
+        .eq('business_id', business.id)
+        .lt('due_date', today)
+        .not('due_date', 'is', null)
+      setOverdueLenderCount((data || []).filter((l) => Number(l.balance) > 0).length)
+    }
+    checkOverdueLenders()
+    const interval = setInterval(checkOverdueLenders, 60000)
     return () => clearInterval(interval)
   }, [business])
 
@@ -172,6 +191,13 @@ export default function Layout() {
               <span>⚠</span>
               <span>{overdueCount} customer{overdueCount !== 1 ? 's' : ''} past their payment deadline</span>
               <a href="/customers" className="ml-auto underline text-xs">View</a>
+            </div>
+          )}
+          {overdueLenderCount > 0 && (
+            <div className="mb-4 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-700 rounded-md px-4 py-2 text-sm font-medium">
+              <span>⚠</span>
+              <span>You're past the repayment date for {overdueLenderCount} lender{overdueLenderCount !== 1 ? 's' : ''}</span>
+              <a href="/lenders" className="ml-auto underline text-xs">View</a>
             </div>
           )}
           <Outlet />

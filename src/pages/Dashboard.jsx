@@ -20,9 +20,11 @@ export default function Dashboard() {
   const [recent, setRecent] = useState([])
   const [todaySales, setTodaySales] = useState({ total: 0, count: 0 })
   const [totalOwed, setTotalOwed] = useState(0)
+  const [netProfit, setNetProfit] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const canSeeRevenue = activeStaff?.role !== 'cashier'
+  const canSeeNetProfit = activeStaff?.role === 'owner'
   const blockedFrom = location.state?.blockedFrom
 
   useEffect(() => {
@@ -34,6 +36,9 @@ export default function Dashboard() {
     setLoading(true)
     const startOfToday = new Date()
     startOfToday.setHours(0, 0, 0, 0)
+    const startOfMonth = new Date()
+    startOfMonth.setDate(1)
+    startOfMonth.setHours(0, 0, 0, 0)
 
     const [{ data: stockData }, { data: recentData }, { data: salesData }, { data: debtorsData }] = await Promise.all([
       supabase.from('product_stock').select('*').eq('business_id', business.id),
@@ -55,6 +60,35 @@ export default function Dashboard() {
     const total = (salesData || []).reduce((sum, s) => sum + Number(s.total_amount), 0)
     setTodaySales({ total, count: (salesData || []).length })
     setTotalOwed((debtorsData || []).reduce((sum, d) => sum + Math.max(0, Number(d.balance) || 0), 0))
+
+    if (activeStaff?.role === 'owner') {
+      const [{ data: monthSales }, { data: monthExpenses }] = await Promise.all([
+        supabase
+          .from('sales')
+          .select('is_refunded, sale_items(quantity, unit_price, unit_cost)')
+          .eq('business_id', business.id)
+          .gte('created_at', startOfMonth.toISOString()),
+        supabase
+          .from('expenses')
+          .select('amount')
+          .eq('business_id', business.id)
+          .gte('created_at', startOfMonth.toISOString()),
+      ])
+      const grossProfit = (monthSales || [])
+        .filter((s) => !s.is_refunded)
+        .reduce(
+          (sum, s) =>
+            sum +
+            (s.sale_items || []).reduce(
+              (isum, i) => isum + i.quantity * (Number(i.unit_price) - Number(i.unit_cost || 0)),
+              0
+            ),
+          0
+        )
+      const expensesTotal = (monthExpenses || []).reduce((sum, e) => sum + Number(e.amount), 0)
+      setNetProfit(grossProfit - expensesTotal)
+    }
+
     setLoading(false)
   }
 
@@ -104,6 +138,18 @@ export default function Dashboard() {
             </div>
           </Link>
         </div>
+      )}
+
+      {canSeeNetProfit && (
+        <Link to="/sales" className="card p-4 flex items-center justify-between hover:bg-paper transition-colors">
+          <div>
+            <div className="text-xs text-muted mb-1">Net profit (this month, after expenses)</div>
+            <div className={`font-mono text-2xl font-semibold ${netProfit < 0 ? 'text-brick' : 'text-brand-dark'}`}>
+              UGX {netProfit.toLocaleString()}
+            </div>
+            <div className="text-xs text-muted mt-1">month-to-date · full breakdown on Sales →</div>
+          </div>
+        </Link>
       )}
 
       <div className="grid grid-cols-3 gap-3">
