@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import BirthdayCountdown from '../components/BirthdayCountdown'
 
 const ROUTE_LABELS = {
   '/products': 'Products',
@@ -65,9 +66,12 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-xl font-semibold">Dashboard</h1>
-        <p className="text-muted text-sm">A snapshot of your stock right now.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-xl font-semibold">Dashboard</h1>
+          <p className="text-muted text-sm">A snapshot of your stock right now.</p>
+        </div>
+        <BirthdayCountdown />
       </div>
 
       {blockedFrom && (

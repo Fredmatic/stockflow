@@ -1,27 +1,42 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { getDaysRemaining } from '../lib/birthday'
 
-const BIRTHDAY_MONTH = 7 // July
-const BIRTHDAY_DAY = 17
+const STORAGE_KEY = 'birthdayPopupLastShown'
+const AUTO_DISMISS_MS = 15000
 
+function todayKey() {
+  const d = new Date()
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+}
 
-// Shown to every user on every app open, every day, from now through July
-// 17th. Counts down the days remaining and shows a photo every day (not
-// just on the day itself) — the photo can be swapped daily by dropping a
-// new file named for that date into public/birthday/, e.g. 2026-07-05.jpg.
-// If no image exists for today, it falls back to fred.jpg.
-// Intentionally has no "don't show again" — meant to be seen every open.
+// Shown once per day, on the first app open of the day, from now through
+// July 17th. Auto-dismisses after 15 seconds if the button isn't clicked.
+// Counts down the days remaining; shows the birthday photo on the day itself.
 export default function BirthdayPopup({ name }) {
-  const [dismissed, setDismissed] = useState(false)
-
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(now.getFullYear(), BIRTHDAY_MONTH - 1, BIRTHDAY_DAY)
-  const msPerDay = 24 * 60 * 60 * 1000
-  const daysRemaining = Math.round((target - today) / msPerDay)
+  const daysRemaining = getDaysRemaining()
   const isBirthday = daysRemaining === 0
   const inWindow = daysRemaining >= 0
 
-  if (!inWindow || dismissed) return null
+  const alreadyShownToday = typeof window !== 'undefined'
+    ? window.localStorage.getItem(STORAGE_KEY) === todayKey()
+    : true
+
+  const [visible, setVisible] = useState(inWindow && !alreadyShownToday)
+  const timerRef = useRef(null)
+
+  useEffect(() => {
+    if (!visible) return
+    window.localStorage.setItem(STORAGE_KEY, todayKey())
+    timerRef.current = setTimeout(() => setVisible(false), AUTO_DISMISS_MS)
+    return () => clearTimeout(timerRef.current)
+  }, [visible])
+
+  if (!visible) return null
+
+  function close() {
+    clearTimeout(timerRef.current)
+    setVisible(false)
+  }
 
   const buttonLabel = name
     ? `Thank you for using StockTracer, ${name}`
@@ -31,7 +46,7 @@ export default function BirthdayPopup({ name }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
       <div className="bg-paper-raised w-full max-w-sm rounded-lg overflow-hidden relative shadow-2xl text-center">
         <button
-          onClick={() => setDismissed(true)}
+          onClick={close}
           aria-label="Close"
           className="absolute top-3 right-3 text-white/90 hover:text-white text-lg leading-none w-7 h-7 flex items-center justify-center bg-black/30 rounded-full z-10"
         >
@@ -65,7 +80,7 @@ export default function BirthdayPopup({ name }) {
           )}
         </div>
 
-        <button onClick={() => setDismissed(true)} className="btn-primary w-full rounded-none py-3">
+        <button onClick={close} className="btn-primary w-full rounded-none py-3">
           {buttonLabel}
         </button>
       </div>
