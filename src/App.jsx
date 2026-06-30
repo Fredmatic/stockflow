@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
 import { canAccess } from './lib/permissions'
 import Login from './pages/Login'
 import StaffPicker from './pages/StaffPicker'
@@ -63,6 +64,7 @@ function Restricted({ path, children }) {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <AuthProvider>
       <BrowserRouter>
         <Gate>
@@ -82,5 +84,6 @@ export default function App() {
         </Gate>
       </BrowserRouter>
     </AuthProvider>
+    </ThemeProvider>
   )
 }

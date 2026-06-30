@@ -30,6 +30,33 @@ body {
   font-family: var(--font-body);
 }
 
+/* Dark mode — overrides the same variables every component already uses,
+   so no component needs dark: variants scattered through its JSX. Toggled
+   by adding/removing .dark on <html> (see ThemeContext). */
+.dark {
+  --color-ink: #E7EDE9;
+  --color-paper: #11211B;
+  --color-paper-raised: #1A2D26;
+  --color-line: #2C4239;
+
+  --color-brand: #3FA388;
+  --color-brand-dark: #6FC2AA;
+  --color-brand-light: #1E3A30;
+
+  --color-amber: #E0A857;
+  --color-amber-light: #3A2E18;
+
+  --color-brick: #E0786A;
+  --color-brick-light: #3A2320;
+
+  --color-muted: #8FA39A;
+}
+
+.dark body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
 .font-display {
   font-family: var(--font-display);
 }

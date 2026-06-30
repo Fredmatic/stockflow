@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { canAccess } from '../lib/permissions'
 import { hasTutorialBeenDismissed } from '../lib/tutorialStorage'
 import TutorialPopup from './TutorialPopup'
+import BirthdayPopup from './BirthdayPopup'
 import { supabase } from '../lib/supabase'
 import { queueCount } from '../lib/offlineQueue'
 import Calculator from './Calculator'
@@ -21,6 +23,7 @@ const NAV_ITEMS = [
 
 export default function Layout() {
   const { business, activeStaff, switchUser, signOut } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   // Same bootstrap exception as App.jsx's <Restricted>: before anyone has
   // picked a staff member, /staff must still be reachable so the owner can
   // add the first team member at all.
@@ -98,6 +101,9 @@ export default function Layout() {
         <div className="px-5 py-4 ledger-rule border-t">
           <div className="text-sm font-medium">{activeStaff?.name}</div>
           <div className="text-xs text-muted uppercase tracking-wide mb-3">{activeStaff?.role}</div>
+          <button onClick={toggleTheme} className="text-xs text-brand-dark font-medium block mb-1">
+            {theme === 'dark' ? '☀ Light mode' : '🌙 Dark mode'}
+          </button>
           <button onClick={switchUser} className="text-xs text-brand-dark font-medium block mb-1">
             Switch user
           </button>
@@ -129,6 +135,12 @@ export default function Layout() {
                     <div className="text-sm font-medium">{activeStaff?.name}</div>
                     <div className="text-xs text-muted uppercase tracking-wide">{activeStaff?.role}</div>
                   </div>
+                  <button
+                    onClick={() => { toggleTheme() }}
+                    className="w-full text-left px-3 py-2 text-sm text-ink hover:bg-paper"
+                  >
+                    {theme === 'dark' ? '☀ Light mode' : '🌙 Dark mode'}
+                  </button>
                   <button
                     onClick={() => { setShowMobileMenu(false); switchUser() }}
                     className="w-full text-left px-3 py-2 text-sm text-ink hover:bg-paper"
@@ -193,6 +205,8 @@ export default function Layout() {
       </button>
 
       {showCalculator && <Calculator onClose={() => setShowCalculator(false)} />}
+
+      <BirthdayPopup />
 
       {showTutorial && (
         <TutorialPopup
