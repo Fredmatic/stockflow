@@ -206,7 +206,7 @@ export default function Layout() {
 
       {showCalculator && <Calculator onClose={() => setShowCalculator(false)} />}
 
-      <BirthdayPopup />
+      <BirthdayPopup name={activeStaff?.name} />
 
       {showTutorial && (
         <TutorialPopup
