@@ -15,6 +15,33 @@ function displayName(item) {
   return `${item.product_name} — ${label}`
 }
 
+function buildReceiptText(receipt) {
+  const lines = []
+  lines.push(`*${receipt.businessName}*`)
+  lines.push(receipt.date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }))
+  lines.push('')
+  receipt.items.forEach((it) => {
+    const lineTotal = it.quantity * it.unitPrice
+    lines.push(`${it.quantity} x ${it.name} — UGX ${lineTotal.toLocaleString()}`)
+  })
+  lines.push('')
+  lines.push(`*Total: UGX ${receipt.total.toLocaleString()}*`)
+  lines.push(
+    receipt.paymentMethod === 'credit'
+      ? `Payment: On credit${receipt.customerName ? ` (${receipt.customerName})` : ''}`
+      : 'Payment: Cash'
+  )
+  lines.push('')
+  lines.push('Thank you for your business!')
+  return lines.join('\n')
+}
+
+function shareReceiptWhatsApp(receipt) {
+  const text = buildReceiptText(receipt)
+  const url = `https://wa.me/?text=${encodeURIComponent(text)}`
+  window.open(url, '_blank')
+}
+
 export default function Sell() {
   const { business, activeStaff } = useAuth()
   const [items, setItems] = useState([])
@@ -22,6 +49,7 @@ export default function Sell() {
   const [cart, setCart] = useState([]) // {item, quantity, manualPrice}
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [lastReceipt, setLastReceipt] = useState(null)
 
   const canSeeProfit = activeStaff?.role === 'owner'
   const [scanning, setScanning] = useState(false)
@@ -235,11 +263,23 @@ export default function Sell() {
             ? `Sale completed — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
             : `Sale completed — UGX ${total.toLocaleString()}`
       )
+      setLastReceipt({
+        businessName: business?.name || 'Shop',
+        items: cart.map((i) => ({
+          name: displayName(i.item),
+          quantity: i.quantity,
+          unitPrice: unitPriceFor(i),
+        })),
+        total,
+        paymentMethod,
+        customerName: paymentMethod === 'credit' ? selectedCustomer.name : null,
+        date: new Date(),
+      })
       setCart([])
       setPaymentMethod('cash')
       setSelectedCustomer(null)
       setCustomerSearch('')
-      setTimeout(() => setMessage(''), 4000)
+      setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
     } catch (err) {
       setMessage(`Error: ${err.message}`)
     } finally {
@@ -298,7 +338,22 @@ export default function Sell() {
           <h2 className="font-display text-sm font-semibold">Current sale</h2>
         </div>
 
-        {message && <p className="text-sm text-brand-dark bg-brand-light rounded-md px-3 py-2 mb-3">{message}</p>}
+        {message && (
+          <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2">
+            <p className="text-sm text-brand-dark">{message}</p>
+            {lastReceipt && !message.startsWith('Error') && (
+              <button
+                onClick={() => shareReceiptWhatsApp(lastReceipt)}
+                className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/>
+                </svg>
+                Share receipt on WhatsApp
+              </button>
+            )}
+          </div>
+        )}
 
         {cart.length === 0 ? (
           <p className="card px-4 py-8 text-center text-sm text-muted">No items added yet.</p>
