@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { canAccess } from '../lib/permissions'
@@ -25,12 +25,22 @@ const NAV_ITEMS = [
 export default function Layout() {
   const { business, activeStaff, switchUser, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const location = useLocation()
   // Same bootstrap exception as App.jsx's <Restricted>: before anyone has
   // picked a staff member, /staff must still be reachable so the owner can
   // add the first team member at all.
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => (item.to === '/staff' && !activeStaff) || canAccess(item.to, activeStaff)
   )
+
+  // Mobile bottom tab bar: keep it to a max of 4 tabs so it never feels
+  // cramped, however many sections the signed-in role can see. Anything
+  // past that lives behind a "More" sheet instead of squeezing in.
+  const BOTTOM_TAB_LIMIT = 4
+  const primaryNavItems = visibleNavItems.slice(0, BOTTOM_TAB_LIMIT)
+  const overflowNavItems = visibleNavItems.slice(BOTTOM_TAB_LIMIT)
+  const isOnOverflowRoute = overflowNavItems.some((item) => item.to === location.pathname)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
 
   // Show the walkthrough right after someone picks their name/PIN, unless
   // they've already told us (on this device) not to show it again. Computed
@@ -204,8 +214,8 @@ export default function Layout() {
         </main>
 
         {/* Bottom tab bar — mobile */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-paper-raised border-t border-line flex">
-          {visibleNavItems.map((item) => (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-paper-raised border-t border-line flex z-40">
+          {primaryNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -219,7 +229,45 @@ export default function Layout() {
               {item.label}
             </NavLink>
           ))}
+          {overflowNavItems.length > 0 && (
+            <button
+              onClick={() => setShowMoreMenu(true)}
+              className={`flex-1 flex flex-col items-center py-2 text-xs ${
+                isOnOverflowRoute ? 'text-brand-dark' : 'text-muted'
+              }`}
+            >
+              <span className="font-mono text-base">⋯</span>
+              More
+            </button>
+          )}
         </nav>
+
+        {showMoreMenu && (
+          <div className="md:hidden fixed inset-0 z-50 flex items-end" onClick={() => setShowMoreMenu(false)}>
+            <div className="fixed inset-0 bg-black/30" />
+            <div
+              className="relative w-full bg-paper-raised rounded-t-lg p-2 pb-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-10 h-1 bg-line rounded-full mx-auto my-2" />
+              {overflowNavItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setShowMoreMenu(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium ${
+                      isActive ? 'bg-brand-light text-brand-dark' : 'text-ink'
+                    }`
+                  }
+                >
+                  <span className="font-mono w-5 text-center">{item.icon}</span>
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <button
