@@ -61,6 +61,7 @@ create table product_variants (
   product_id uuid not null references products(id) on delete cascade,
   business_id uuid not null references businesses(id) on delete cascade,
   name text not null,
+  sub_name text,
   sku text,
   barcode text,
   cost_price numeric(12,2) not null default 0,
