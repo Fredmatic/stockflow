@@ -748,26 +748,89 @@ function ProductForm({ business, product, onClose, onSaved }) {
   )
 }
 
+// Phone cameras produce huge images (often 3000x4000px+) that look soft when
+// the browser downscales them on the fly into a small thumbnail. Resizing to
+// a sane max dimension on a canvas before upload fixes the blur and also
+// makes uploads much faster on slow mobile data.
+function resizeImage(file, maxDimension = 1000, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      img.onload = () => {
+        let { width, height } = img
+        if (width > height && width > maxDimension) {
+          height = Math.round((height * maxDimension) / width)
+          width = maxDimension
+        } else if (height > maxDimension) {
+          width = Math.round((width * maxDimension) / height)
+          height = maxDimension
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(img, 0, 0, width, height)
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { reject(new Error('Could not process image')); return }
+            resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }))
+          },
+          'image/jpeg',
+          quality
+        )
+      }
+      img.onerror = () => reject(new Error('Could not read image'))
+      img.src = e.target.result
+    }
+    reader.onerror = () => reject(new Error('Could not read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
 function ImagePicker({ preview, onPick, onRemove }) {
-  function handleFile(e) {
+  const [processing, setProcessing] = useState(false)
+  async function handleFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 8 * 1024 * 1024) {
-      alert('Photo is too large — please pick one under 8MB.')
+    if (file.size > 20 * 1024 * 1024) {
+      alert('Photo is too large — please pick one under 20MB.')
+      e.target.value = ''
       return
     }
-    onPick(file)
-    e.target.value = '' // allow re-picking the same file later
+    setProcessing(true)
+    try {
+      const resized = await resizeImage(file)
+      onPick(resized)
+    } catch (err) {
+      alert('Could not process that photo, please try another.')
+    } finally {
+      setProcessing(false)
+      e.target.value = '' // allow re-picking the same file later
+    }
   }
 
   return (
     <div className="flex items-center gap-3">
       {preview ? (
         <div className="relative w-20 h-20 shrink-0">
-          <img src={preview} alt="Product" className="w-20 h-20 rounded-md object-cover border border-line" />
+          <img
+            src={preview}
+            alt="Product"
+            className="w-20 h-20 rounded-md object-cover border border-line bg-paper"
+            style={{ imageRendering: 'auto' }}
+          />
+          {processing && (
+            <div className="absolute inset-0 rounded-md bg-black/50 flex items-center justify-center">
+              <span className="text-white text-[10px]">Processing…</span>
+            </div>
+          )}
           <button
             type="button"
             onClick={onRemove}
+            disabled={processing}
             className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-brick text-white text-xs flex items-center justify-center"
             aria-label="Remove photo"
           >
@@ -775,23 +838,27 @@ function ImagePicker({ preview, onPick, onRemove }) {
           </button>
         </div>
       ) : (
-        <div className="w-20 h-20 rounded-md border border-dashed border-line flex items-center justify-center text-muted shrink-0">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <circle cx="12" cy="12" r="3.5" />
-            <path d="M8 5l1.2-2h5.6L16 5" />
-          </svg>
+        <div className="relative w-20 h-20 rounded-md border border-dashed border-line flex items-center justify-center text-muted shrink-0">
+          {processing ? (
+            <span className="text-[10px] text-muted">Processing…</span>
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <circle cx="12" cy="12" r="3.5" />
+              <path d="M8 5l1.2-2h5.6L16 5" />
+            </svg>
+          )}
         </div>
       )}
 
       <div className="flex flex-col gap-1.5">
-        <label className="btn-secondary text-xs px-3 py-1.5 cursor-pointer text-center">
+        <label className={`btn-secondary text-xs px-3 py-1.5 text-center ${processing ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
           {preview ? 'Retake photo' : '📷 Take photo'}
-          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
+          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} disabled={processing} />
         </label>
-        <label className="btn-secondary text-xs px-3 py-1.5 cursor-pointer text-center">
+        <label className={`btn-secondary text-xs px-3 py-1.5 text-center ${processing ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
           Choose from gallery
-          <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
+          <input type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={processing} />
         </label>
       </div>
     </div>
