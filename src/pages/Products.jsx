@@ -853,7 +853,7 @@ function ImagePicker({ preview, onPick, onRemove }) {
 
       <div className="flex flex-col gap-1.5">
         <label className={`btn-secondary text-xs px-3 py-1.5 text-center ${processing ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
-          {preview ? 'Retake photo' : '📷 Take photo'}
+          {preview ? 'Retake photo' : '📷 Camera or gallery'}
           <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} disabled={processing} />
         </label>
         <label className={`btn-secondary text-xs px-3 py-1.5 text-center ${processing ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
