@@ -23,29 +23,46 @@ function calculate(a, b, op) {
   }
 }
 
+// Persisted outside the component so state survives close (X button).
+// Only cleared when the user explicitly presses C.
+const savedState = {
+  display: '0',
+  stored: null,
+  operator: null,
+  justEvaluated: false,
+}
+
 export default function Calculator({ onClose }) {
-  const [display, setDisplay] = useState('0')
-  const [stored, setStored] = useState(null)
-  const [operator, setOperator] = useState(null)
-  const [justEvaluated, setJustEvaluated] = useState(false)
+  const [display, setDisplay]               = useState(savedState.display)
+  const [stored, setStored]                 = useState(savedState.stored)
+  const [operator, setOperator]             = useState(savedState.operator)
+  const [justEvaluated, setJustEvaluated]   = useState(savedState.justEvaluated)
+
+  // Keep savedState in sync every time any piece changes
+  function save(patch) {
+    Object.assign(savedState, patch)
+  }
 
   function inputDigit(d) {
     if (display === 'Error' || justEvaluated) {
-      setDisplay(d)
-      setJustEvaluated(false)
+      setDisplay(d);                    save({ display: d })
+      setJustEvaluated(false);          save({ justEvaluated: false })
       return
     }
-    if (display === '0') setDisplay(d)
-    else setDisplay(display + d)
+    const next = display === '0' ? d : display + d
+    setDisplay(next); save({ display: next })
   }
 
   function inputDecimal() {
     if (display === 'Error' || justEvaluated) {
-      setDisplay('0.')
-      setJustEvaluated(false)
+      setDisplay('0.');                 save({ display: '0.' })
+      setJustEvaluated(false);          save({ justEvaluated: false })
       return
     }
-    if (!display.includes('.')) setDisplay(display + '.')
+    if (!display.includes('.')) {
+      const next = display + '.'
+      setDisplay(next); save({ display: next })
+    }
   }
 
   function chooseOperator(op) {
@@ -53,42 +70,45 @@ export default function Calculator({ onClose }) {
     if (stored !== null && operator && !justEvaluated) {
       const result = calculate(stored, display, operator)
       const resultStr = Number.isNaN(result) ? 'Error' : String(result)
-      setStored(resultStr)
-      setDisplay(resultStr)
+      setStored(resultStr);             save({ stored: resultStr })
+      setDisplay(resultStr);            save({ display: resultStr })
     } else {
-      setStored(display)
+      setStored(display);               save({ stored: display })
     }
-    setOperator(op)
-    setJustEvaluated(true)
+    setOperator(op);                    save({ operator: op })
+    setJustEvaluated(true);             save({ justEvaluated: true })
   }
 
   function evaluate() {
     if (stored === null || operator === null || display === 'Error') return
     const result = calculate(stored, display, operator)
-    setDisplay(Number.isNaN(result) ? 'Error' : String(result))
-    setStored(null)
-    setOperator(null)
-    setJustEvaluated(true)
+    const resultStr = Number.isNaN(result) ? 'Error' : String(result)
+    setDisplay(resultStr);              save({ display: resultStr })
+    setStored(null);                    save({ stored: null })
+    setOperator(null);                  save({ operator: null })
+    setJustEvaluated(true);             save({ justEvaluated: true })
   }
 
   function clearAll() {
-    setDisplay('0')
-    setStored(null)
-    setOperator(null)
-    setJustEvaluated(false)
+    setDisplay('0');                    save({ display: '0' })
+    setStored(null);                    save({ stored: null })
+    setOperator(null);                  save({ operator: null })
+    setJustEvaluated(false);            save({ justEvaluated: false })
   }
 
   function backspace() {
     if (display === 'Error' || justEvaluated || display.length <= 1) {
-      setDisplay('0')
+      setDisplay('0'); save({ display: '0' })
       return
     }
-    setDisplay(display.slice(0, -1))
+    const next = display.slice(0, -1)
+    setDisplay(next); save({ display: next })
   }
 
   function toggleSign() {
     if (display === 'Error' || display === '0') return
-    setDisplay(display.startsWith('-') ? display.slice(1) : '-' + display)
+    const next = display.startsWith('-') ? display.slice(1) : '-' + display
+    setDisplay(next); save({ display: next })
   }
 
   const padBtn = 'rounded-md text-base font-mono py-3 active:scale-95 transition-transform'
