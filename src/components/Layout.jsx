@@ -11,7 +11,7 @@ import { queueCount } from '../lib/offlineQueue'
 import Calculator from './Calculator'
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: '◧' },
+  { to: '/dashboard', label: 'Dashboard', icon: '◧' },
   { to: '/products', label: 'Products', icon: '▤' },
   { to: '/stock-in', label: 'Stock In', icon: '↓' },
   { to: '/sell', label: 'Sell', icon: '↑' },

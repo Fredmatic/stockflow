@@ -6,7 +6,7 @@
 // activeStaff.role, picked on the StaffPicker screen.
 
 export const ROUTE_ACCESS = {
-  '/': ['owner', 'staff', 'cashier'],
+  '/dashboard': ['owner', 'staff', 'cashier'],
   '/products': ['owner', 'staff'],
   '/stock-in': ['owner', 'staff'],
   '/sell': ['owner', 'staff', 'cashier'],

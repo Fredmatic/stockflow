@@ -2,7 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { canAccess } from './lib/permissions'
-import Login from './pages/Login'
+import Landing from './pages/Landing'
+import LoginPage from './pages/LoginPage'
+import Signup from './pages/Signup'
 import StaffPicker from './pages/StaffPicker'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
@@ -15,16 +17,21 @@ import Lenders from './pages/Lenders'
 import Staff from './pages/Staff'
 import Expenses from './pages/Expenses'
 
+const PUBLIC_PATHS = ['/', '/login', '/signup']
+
 function Gate({ children }) {
   const { session, business, businessLoading, businessError, activeStaff, loading, signOut } = useAuth()
   const location = useLocation()
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Loading…</div>
-  if (!session) return <Login />
+
+  // Public pages — always accessible
+  if (PUBLIC_PATHS.includes(location.pathname)) return children
+
+  // Protected area below — must be signed in
+  if (!session) return <Navigate to="/" replace />
   if (businessLoading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Setting up your business…</div>
   if (!business) return <NoBusinessScreen error={businessError} onSignOut={signOut} />
-  // Allow reaching the Staff page even before anyone has picked an active
-  // staff member — the owner needs this to add their team in the first place.
   if (!activeStaff && location.pathname !== '/staff') return <StaffPicker />
   return children
 }
@@ -60,7 +67,7 @@ function Restricted({ path, children }) {
   const { activeStaff } = useAuth()
   if (path === '/staff' && !activeStaff) return children
   if (canAccess(path, activeStaff)) return children
-  return <Navigate to="/" replace state={{ blockedFrom: path }} />
+  return <Navigate to="/dashboard" replace state={{ blockedFrom: path }} />
 }
 
 export default function App() {
@@ -70,8 +77,14 @@ export default function App() {
       <BrowserRouter>
         <Gate>
           <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<PublicOrApp />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<Signup />} />
+
+            {/* Protected app routes */}
             <Route element={<Layout />}>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/products" element={<Restricted path="/products"><Products /></Restricted>} />
               <Route path="/stock-in" element={<Restricted path="/stock-in"><StockIn /></Restricted>} />
               <Route path="/sell" element={<Restricted path="/sell"><Sell /></Restricted>} />
@@ -80,7 +93,7 @@ export default function App() {
               <Route path="/lenders" element={<Restricted path="/lenders"><Lenders /></Restricted>} />
               <Route path="/expenses" element={<Restricted path="/expenses"><Expenses /></Restricted>} />
               <Route path="/staff" element={<Restricted path="/staff"><Staff /></Restricted>} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>
           </Routes>
         </Gate>
@@ -88,4 +101,13 @@ export default function App() {
     </AuthProvider>
     </ThemeProvider>
   )
+}
+
+// Root path "/" shows the landing page to visitors, or redirects signed-in
+// users straight into the app dashboard.
+function PublicOrApp() {
+  const { session, loading } = useAuth()
+  if (loading) return null
+  if (session) return <Navigate to="/dashboard" replace />
+  return <Landing />
 }
