@@ -5,6 +5,8 @@ import { canAccess } from './lib/permissions'
 import Landing from './pages/Landing'
 import LoginPage from './pages/LoginPage'
 import Signup from './pages/Signup'
+import ResetPassword from './pages/ResetPassword'
+import TrialExpiredScreen, { daysLeft } from './pages/TrialExpired'
 import StaffPicker from './pages/StaffPicker'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
@@ -17,7 +19,7 @@ import Lenders from './pages/Lenders'
 import Staff from './pages/Staff'
 import Expenses from './pages/Expenses'
 
-const PUBLIC_PATHS = ['/', '/login', '/signup']
+const PUBLIC_PATHS = ['/', '/login', '/signup', '/reset-password']
 
 function Gate({ children }) {
   const { session, business, businessLoading, businessError, activeStaff, loading, signOut } = useAuth()
@@ -32,6 +34,13 @@ function Gate({ children }) {
   if (!session) return <Navigate to="/" replace />
   if (businessLoading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Setting up your business…</div>
   if (!business) return <NoBusinessScreen error={businessError} onSignOut={signOut} />
+
+  // Trial / subscription check — expired businesses see the paywall
+  const expired = business.subscription_status === 'expired' || daysLeft(business.trial_ends_at) === 0
+  if (expired && business.subscription_status !== 'active') {
+    return <TrialExpiredScreen business={business} onSignOut={signOut} />
+  }
+
   if (!activeStaff && location.pathname !== '/staff') return <StaffPicker />
   return children
 }
@@ -81,6 +90,7 @@ export default function App() {
             <Route path="/" element={<PublicOrApp />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             {/* Protected app routes */}
             <Route element={<Layout />}>

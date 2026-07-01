@@ -81,6 +81,11 @@ export default function LoginPage() {
             Start free trial
           </Link>
         </p>
+        <p className="text-xs text-muted text-center mt-2">
+          <Link to="/reset-password" className="hover:underline">
+            Forgot your password?
+          </Link>
+        </p>
       </div>
     </div>
   )

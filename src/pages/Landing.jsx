@@ -40,13 +40,13 @@ const TESTIMONIALS = [
     quote: 'StockTracer showed me I was losing money on two products I thought were profitable. That alone paid for itself.',
   },
   {
-    name: 'Namubiru J.',
-    business: 'Salon & Beauty, Bulenga',
+    name: 'Sarah K.',
+    business: 'Salon & Beauty, Entebbe',
     quote: 'My staff used to steal stock and I had no way to prove it. Now every item is tracked.',
   },
   {
-    name: 'Stanely S.',
-    business: 'Electronics Hub, Bwaise',
+    name: 'James O.',
+    business: 'Electronics Hub, Jinja',
     quote: 'I can see my shop\'s performance from my phone even when I\'m not there. Game changer.',
   },
 ]
@@ -219,10 +219,11 @@ export default function Landing() {
             {PLANS.map((plan) => (
               <div
                 key={plan.name}
-                className={`rounded-lg p-5 border flex flex-col ${plan.highlight
-                  ? 'bg-brand-dark text-white border-transparent'
-                  : 'bg-paper border-line text-ink'
-                  }`}
+                className={`rounded-lg p-5 border flex flex-col ${
+                  plan.highlight
+                    ? 'bg-brand-dark text-white border-transparent'
+                    : 'bg-paper border-line text-ink'
+                }`}
               >
                 {plan.highlight && (
                   <div className="text-xs font-medium bg-white/20 rounded-full px-2 py-0.5 w-fit mb-3">
@@ -242,12 +243,12 @@ export default function Landing() {
                   ))}
                 </ul>
                 <button
-                  onClick={() => navigate(plan.name === 'Custom' ? window.open('https://wa.me/256740192827', '_blank')
-                    : navigate('/signup'))}
-                  className={`w-full py-2 rounded-md text-sm font-medium transition-colors ${plan.highlight
-                    ? 'bg-white text-brand-dark hover:bg-brand-light'
-                    : 'btn-primary'
-                    }`}
+                  onClick={() => navigate(plan.name === 'Custom' ? 'mailto:fred@stocktracer.com' : '/signup')}
+                  className={`w-full py-2 rounded-md text-sm font-medium transition-colors ${
+                    plan.highlight
+                      ? 'bg-white text-brand-dark hover:bg-brand-light'
+                      : 'btn-primary'
+                  }`}
                 >
                   {plan.cta}
                 </button>

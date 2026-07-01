@@ -6,6 +6,7 @@ import { canAccess } from '../lib/permissions'
 import { hasTutorialBeenDismissed } from '../lib/tutorialStorage'
 import TutorialPopup from './TutorialPopup'
 import BirthdayPopup from './BirthdayPopup'
+import TrialBanner from './TrialBanner'
 import { supabase } from '../lib/supabase'
 import { queueCount } from '../lib/offlineQueue'
 import Calculator from './Calculator'
@@ -189,6 +190,7 @@ export default function Layout() {
         </header>
 
         <main className="flex-1 p-4 md:p-8 pb-20 md:pb-8">
+          <TrialBanner business={business} />
           {pendingSales > 0 && (
             <div className="mb-4 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-700 rounded-md px-4 py-2 text-sm font-medium">
               <span>📴</span>
