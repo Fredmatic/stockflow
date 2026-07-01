@@ -220,8 +220,8 @@ export default function Landing() {
               <div
                 key={plan.name}
                 className={`rounded-lg p-5 border flex flex-col ${plan.highlight
-                    ? 'bg-brand-dark text-white border-transparent'
-                    : 'bg-paper border-line text-ink'
+                  ? 'bg-brand-dark text-white border-transparent'
+                  : 'bg-paper border-line text-ink'
                   }`}
               >
                 {plan.highlight && (
@@ -242,10 +242,11 @@ export default function Landing() {
                   ))}
                 </ul>
                 <button
-                  onClick={() => navigate(plan.name === 'Custom' ? 'mailto:fred@stocktracer.com' : '/signup')}
+                  onClick={() => navigate(plan.name === 'Custom' ? window.open('https://wa.me/256740192827', '_blank')
+                    : navigate('/signup'))}
                   className={`w-full py-2 rounded-md text-sm font-medium transition-colors ${plan.highlight
-                      ? 'bg-white text-brand-dark hover:bg-brand-light'
-                      : 'btn-primary'
+                    ? 'bg-white text-brand-dark hover:bg-brand-light'
+                    : 'btn-primary'
                     }`}
                 >
                   {plan.cta}

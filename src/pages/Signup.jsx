@@ -90,9 +90,8 @@ export default function Signup() {
           <div className="flex items-center gap-2">
             {STEPS.slice(0, 2).map((label, i) => (
               <div key={label} className="flex items-center gap-2 flex-1">
-                <div className={`w-6 h-6 rounded-full text-xs font-semibold flex items-center justify-center flex-shrink-0 ${
-                  i < step ? 'bg-brand-dark text-white' : i === step ? 'bg-brand text-white' : 'bg-line text-muted'
-                }`}>
+                <div className={`w-6 h-6 rounded-full text-xs font-semibold flex items-center justify-center flex-shrink-0 ${i < step ? 'bg-brand-dark text-white' : i === step ? 'bg-brand text-white' : 'bg-line text-muted'
+                  }`}>
                   {i < step ? '✓' : i + 1}
                 </div>
                 <span className={`text-xs flex-1 ${i === step ? 'text-ink font-medium' : 'text-muted'}`}>{label}</span>
@@ -119,7 +118,7 @@ export default function Signup() {
                 className="input"
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="e.g. Fred's Electronics"
+                placeholder="e.g. Fred's Shop"
                 autoFocus
               />
             </Field>
@@ -129,7 +128,7 @@ export default function Signup() {
                 className="input"
                 value={ownerName}
                 onChange={(e) => setOwnerName(e.target.value)}
-                placeholder="e.g. Fred Mugisha"
+                placeholder="e.g. Fred Ssaazi"
               />
             </Field>
 
@@ -140,11 +139,10 @@ export default function Signup() {
                     key={t.value}
                     type="button"
                     onClick={() => setBusinessType(t.value)}
-                    className={`text-left text-xs px-3 py-2 rounded-md border transition-colors ${
-                      businessType === t.value
-                        ? 'border-brand bg-brand-light text-brand-dark font-medium'
-                        : 'border-line text-muted hover:border-brand-light'
-                    }`}
+                    className={`text-left text-xs px-3 py-2 rounded-md border transition-colors ${businessType === t.value
+                      ? 'border-brand bg-brand-light text-brand-dark font-medium'
+                      : 'border-line text-muted hover:border-brand-light'
+                      }`}
                   >
                     {t.label}
                   </button>
