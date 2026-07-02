@@ -27,6 +27,11 @@ function Gate({ children }) {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Loading…</div>
 
+  // If already logged in, don't show auth pages — go straight to app
+  if (session && ['/login', '/signup'].includes(location.pathname)) {
+    return <Navigate to="/dashboard" replace />
+  }
+
   // Public pages — always accessible
   if (PUBLIC_PATHS.includes(location.pathname)) return children
 
@@ -82,33 +87,33 @@ function Restricted({ path, children }) {
 export default function App() {
   return (
     <ThemeProvider>
-    <AuthProvider>
-      <BrowserRouter>
-        <Gate>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<PublicOrApp />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
+      <AuthProvider>
+        <BrowserRouter>
+          <Gate>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<PublicOrApp />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
-            {/* Protected app routes */}
-            <Route element={<Layout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/products" element={<Restricted path="/products"><Products /></Restricted>} />
-              <Route path="/stock-in" element={<Restricted path="/stock-in"><StockIn /></Restricted>} />
-              <Route path="/sell" element={<Restricted path="/sell"><Sell /></Restricted>} />
-              <Route path="/sales" element={<Restricted path="/sales"><Sales /></Restricted>} />
-              <Route path="/customers" element={<Restricted path="/customers"><Customers /></Restricted>} />
-              <Route path="/lenders" element={<Restricted path="/lenders"><Lenders /></Restricted>} />
-              <Route path="/expenses" element={<Restricted path="/expenses"><Expenses /></Restricted>} />
-              <Route path="/staff" element={<Restricted path="/staff"><Staff /></Restricted>} />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Route>
-          </Routes>
-        </Gate>
-      </BrowserRouter>
-    </AuthProvider>
+              {/* Protected app routes */}
+              <Route element={<Layout />}>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/products" element={<Restricted path="/products"><Products /></Restricted>} />
+                <Route path="/stock-in" element={<Restricted path="/stock-in"><StockIn /></Restricted>} />
+                <Route path="/sell" element={<Restricted path="/sell"><Sell /></Restricted>} />
+                <Route path="/sales" element={<Restricted path="/sales"><Sales /></Restricted>} />
+                <Route path="/customers" element={<Restricted path="/customers"><Customers /></Restricted>} />
+                <Route path="/lenders" element={<Restricted path="/lenders"><Lenders /></Restricted>} />
+                <Route path="/expenses" element={<Restricted path="/expenses"><Expenses /></Restricted>} />
+                <Route path="/staff" element={<Restricted path="/staff"><Staff /></Restricted>} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Route>
+            </Routes>
+          </Gate>
+        </BrowserRouter>
+      </AuthProvider>
     </ThemeProvider>
   )
 }
