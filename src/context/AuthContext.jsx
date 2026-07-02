@@ -12,11 +12,23 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+    supabase.auth.getSession().then(({ data, error }) => {
+      // If the stored token is invalid/expired, wipe it and start fresh
+      if (error || !data.session) {
+        supabase.auth.signOut()
+        setSession(null)
+      } else {
+        setSession(data.session)
+      }
       setLoading(false)
     })
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'TOKEN_REFRESHED' && !newSession) {
+        // Refresh failed — clear everything so user sees the login page
+        supabase.auth.signOut()
+        return
+      }
       setSession(newSession)
       if (!newSession) {
         setBusiness(null)
@@ -24,6 +36,7 @@ export function AuthProvider({ children }) {
         sessionStorage.removeItem('stocktracer_active_staff')
       }
     })
+
     return () => listener.subscription.unsubscribe()
   }, [])
 
