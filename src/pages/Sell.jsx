@@ -513,7 +513,8 @@ export default function Sell() {
                 key={lineId(p)}
                 onClick={() => addToCart(p)}
                 disabled={qty <= 0}
-                className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-paper disabled:opacity-40 transition-colors ${justAdded ? 'bg-brand-light' : ''}`}
+                style={justAdded ? { backgroundColor: 'var(--color-brand-light)' } : undefined}
+                className="w-full text-left px-4 py-3 text-sm flex items-center justify-between md:hover:bg-paper disabled:opacity-40 transition-colors duration-200"
               >
                 <div>
                   <div className="font-medium">{displayName(p)}</div>
@@ -526,7 +527,13 @@ export default function Sell() {
                     · {qty} in stock
                   </div>
                 </div>
-                <span className="font-mono text-brand-dark w-4 text-center">{justAdded ? '✓' : '+'}</span>
+                <span
+                  className={`font-mono w-5 h-5 rounded-full flex items-center justify-center text-xs transition-transform duration-200 ${
+                    justAdded ? 'bg-emerald-600 text-white scale-110' : 'text-brand-dark scale-100'
+                  }`}
+                >
+                  {justAdded ? '✓' : '+'}
+                </span>
               </button>
             )
           })}
@@ -731,7 +738,7 @@ export default function Sell() {
         <button
           type="button"
           onClick={scrollToCart}
-          className="md:hidden fixed bottom-4 left-4 right-4 z-30 btn-primary flex items-center justify-between px-4 py-3 shadow-lg"
+          className="md:hidden fixed bottom-20 left-4 right-20 z-30 btn-primary flex items-center justify-between px-4 py-3 shadow-lg rounded-md"
         >
           <span className="flex items-center gap-2">
             <span className="bg-white/25 rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold">
