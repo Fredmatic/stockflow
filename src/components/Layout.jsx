@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { to: '/lenders', label: 'People I Owe', icon: '◐' },
   { to: '/expenses', label: 'Expenses', icon: '−' },
   { to: '/staff', label: 'Staff', icon: '◍' },
+  { to: '/reports', label: 'Reports', icon: '📊' },
 ]
 
 export default function Layout() {
@@ -118,8 +119,7 @@ export default function Layout() {
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${
-                  isActive ? 'bg-brand-light text-brand-dark' : 'text-ink hover:bg-paper'
+                `flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${isActive ? 'bg-brand-light text-brand-dark' : 'text-ink hover:bg-paper'
                 }`
               }
             >
@@ -222,8 +222,7 @@ export default function Layout() {
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `flex-1 flex flex-col items-center py-2 text-xs ${
-                  isActive ? 'text-brand-dark' : 'text-muted'
+                `flex-1 flex flex-col items-center py-2 text-xs ${isActive ? 'text-brand-dark' : 'text-muted'
                 }`
               }
             >
@@ -234,9 +233,8 @@ export default function Layout() {
           {overflowNavItems.length > 0 && (
             <button
               onClick={() => setShowMoreMenu(true)}
-              className={`flex-1 flex flex-col items-center py-2 text-xs ${
-                isOnOverflowRoute ? 'text-brand-dark' : 'text-muted'
-              }`}
+              className={`flex-1 flex flex-col items-center py-2 text-xs ${isOnOverflowRoute ? 'text-brand-dark' : 'text-muted'
+                }`}
             >
               <span className="font-mono text-base">⋯</span>
               More
@@ -258,8 +256,7 @@ export default function Layout() {
                   to={item.to}
                   onClick={() => setShowMoreMenu(false)}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium ${
-                      isActive ? 'bg-brand-light text-brand-dark' : 'text-ink'
+                    `flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium ${isActive ? 'bg-brand-light text-brand-dark' : 'text-ink'
                     }`
                   }
                 >

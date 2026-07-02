@@ -18,6 +18,7 @@ import Customers from './pages/Customers'
 import Lenders from './pages/Lenders'
 import Staff from './pages/Staff'
 import Expenses from './pages/Expenses'
+import Reports from './pages/Reports'
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/reset-password']
 
@@ -108,6 +109,7 @@ export default function App() {
                 <Route path="/lenders" element={<Restricted path="/lenders"><Lenders /></Restricted>} />
                 <Route path="/expenses" element={<Restricted path="/expenses"><Expenses /></Restricted>} />
                 <Route path="/staff" element={<Restricted path="/staff"><Staff /></Restricted>} />
+                <Route path="/reports" element={<Restricted path="/reports"><Reports /></Restricted>} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Routes>
