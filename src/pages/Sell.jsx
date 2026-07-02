@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
@@ -149,6 +149,15 @@ export default function Sell() {
   const [scanning, setScanning] = useState(false)
   const [scanMessage, setScanMessage] = useState('')
 
+  // Mobile UX: tapping a product adds it to a cart that lives below the fold
+  // (list and cart stack on narrow screens), so there's no visible change
+  // near the button. justAddedId briefly swaps the "+" for a checkmark on
+  // the tapped row, and cartSectionRef lets the sticky mobile bar scroll the
+  // cart into view — together these stop people from re-tapping the same
+  // product thinking nothing happened.
+  const [justAddedId, setJustAddedId] = useState(null)
+  const cartSectionRef = useRef(null)
+
   const [paymentMethod, setPaymentMethod] = useState('cash') // 'cash' | 'credit'
   const [customers, setCustomers] = useState([])
   const [customerSearch, setCustomerSearch] = useState('')
@@ -282,6 +291,7 @@ export default function Sell() {
   function addToCart(item) {
     const hasPrice = Number(item.selling_price) > 0
     const available = item.quantity_on_hand ?? 0
+    let added = false
     setCart((c) => {
       const existing = c.find((i) => lineId(i.item) === lineId(item))
       if (existing) {
@@ -289,14 +299,25 @@ export default function Sell() {
           setMessage(`Error: only ${available} of ${displayName(item)} in stock.`)
           return c
         }
+        added = true
         return c.map((i) => (lineId(i.item) === lineId(item) ? { ...i, quantity: i.quantity + 1 } : i))
       }
       if (available <= 0) {
         setMessage(`Error: ${displayName(item)} is out of stock.`)
         return c
       }
+      added = true
       return [...c, { item, quantity: 1, manualPrice: hasPrice ? null : '' }]
     })
+    if (added) {
+      const id = lineId(item)
+      setJustAddedId(id)
+      setTimeout(() => setJustAddedId((cur) => (cur === id ? null : cur)), 700)
+    }
+  }
+
+  function scrollToCart() {
+    cartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   function setManualPrice(id, value) {
@@ -486,12 +507,13 @@ export default function Sell() {
           {filtered.map((p) => {
             const qty = p.quantity_on_hand ?? 0
             const noPrice = !p.selling_price || Number(p.selling_price) <= 0
+            const justAdded = justAddedId === lineId(p)
             return (
               <button
                 key={lineId(p)}
                 onClick={() => addToCart(p)}
                 disabled={qty <= 0}
-                className="w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-paper disabled:opacity-40"
+                className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-paper disabled:opacity-40 transition-colors ${justAdded ? 'bg-brand-light' : ''}`}
               >
                 <div>
                   <div className="font-medium">{displayName(p)}</div>
@@ -504,14 +526,14 @@ export default function Sell() {
                     · {qty} in stock
                   </div>
                 </div>
-                <span className="font-mono text-brand-dark">+</span>
+                <span className="font-mono text-brand-dark w-4 text-center">{justAdded ? '✓' : '+'}</span>
               </button>
             )
           })}
         </div>
       </div>
 
-      <div>
+      <div ref={cartSectionRef} className="scroll-mt-4">
         <div className="mb-3 pb-2 ledger-rule">
           <h2 className="font-display text-sm font-semibold">Current sale</h2>
         </div>
@@ -704,6 +726,23 @@ export default function Sell() {
       </div>
 
       {scanning && <ScannerModal onResult={handleScan} onClose={() => setScanning(false)} />}
+
+      {cart.length > 0 && (
+        <button
+          type="button"
+          onClick={scrollToCart}
+          className="md:hidden fixed bottom-4 left-4 right-4 z-30 btn-primary flex items-center justify-between px-4 py-3 shadow-lg"
+        >
+          <span className="flex items-center gap-2">
+            <span className="bg-white/25 rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold">
+              {cart.reduce((sum, i) => sum + i.quantity, 0)}
+            </span>
+            View sale
+          </span>
+          <span className="font-mono">UGX {total.toLocaleString()}</span>
+        </button>
+      )}
+      {cart.length > 0 && <div className="md:hidden h-16" aria-hidden="true" />}
     </div>
   )
 }
