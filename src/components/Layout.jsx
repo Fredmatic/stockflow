@@ -82,26 +82,38 @@ export default function Layout() {
         .lt('payment_due_date', today)
         .not('payment_due_date', 'is', null)
       setOverdueCount((data || []).length)
+
+      checkOverdue()
+      const interval = setInterval(checkOverdue, 60000)
+      return () => clearInterval(interval)
     }
-    checkOverdue()
-    const interval = setInterval(checkOverdue, 60000)
-    return () => clearInterval(interval)
   }, [business])
 
   useEffect(() => {
     if (!business) return
-    async function checkOverdueLenders() {
+    async function checkOverdue() {
       const today = new Date().toISOString().split('T')[0]
       const { data } = await supabase
-        .from('lender_summary')
-        .select('lender_id, balance, due_date')
+        .from('debtor_summary')
+        .select('customer_id, balance')
         .eq('business_id', business.id)
-        .lt('due_date', today)
-        .not('due_date', 'is', null)
-      setOverdueLenderCount((data || []).filter((l) => Number(l.balance) > 0).length)
+        .gt('balance', 0)
+
+      const customerIds = (data || []).map(d => d.customer_id)
+      if (customerIds.length === 0) { setOverdueCount(0); return }
+
+      const { data: overdue } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('business_id', business.id)
+        .eq('is_active', true)
+        .lt('payment_due_date', today)
+        .not('payment_due_date', 'is', null)
+        .in('id', customerIds)
+      setOverdueCount((overdue || []).length)
     }
-    checkOverdueLenders()
-    const interval = setInterval(checkOverdueLenders, 60000)
+    checkOverdue()
+    const interval = setInterval(checkOverdue, 60000)
     return () => clearInterval(interval)
   }, [business])
 
