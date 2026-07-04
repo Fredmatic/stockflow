@@ -19,6 +19,7 @@ import Lenders from './pages/Lenders'
 import Staff from './pages/Staff'
 import Expenses from './pages/Expenses'
 import Reports from './pages/Reports'
+import Reminders from './pages/Reminders'
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/reset-password']
 
@@ -100,6 +101,7 @@ export default function App() {
 
               {/* Protected app routes */}
               <Route element={<Layout />}>
+                <Route path="/reminders" element={<Restricted path="/reminders"><Reminders /></Restricted>} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/products" element={<Restricted path="/products"><Products /></Restricted>} />
                 <Route path="/stock-in" element={<Restricted path="/stock-in"><StockIn /></Restricted>} />

@@ -1,7 +1,7 @@
 // Shown when the business's trial has expired and they haven't paid yet.
 // Gives them a clear call-to-action to pay via WhatsApp/MTN Mobile Money.
 
-const WHATSAPP_NUMBER = '256708401692' // Fred's number — update if needed
+const WHATSAPP_NUMBER = '256740193837' // Fred's number — update if needed
 const MTN_PAYBILL = '256708401692'     // update to actual MTN Mobile Money number
 
 function daysLeft(trialEndsAt) {
