@@ -130,7 +130,7 @@ async function pushSaleToServer(business, saleData) {
 
 // ── Cart Drawer (mobile only) ───────────────────────────────────────────────
 function CartDrawer({
-  open, onClose, cart, updateQty, unitPriceFor, displayName, lineId,
+  open, onClose, cart, updateQty, unitPriceFor, displayName, lineId, setManualPrice,
   canSeeProfit, total, totalProfit, paymentMethod, setPaymentMethodSafe,
   selectedCustomer, setSelectedCustomer, customers, customerSearch,
   setCustomerSearch, filteredCustomers, addingCustomer, setAddingCustomer,
@@ -199,10 +199,7 @@ function CartDrawer({
                       <input type="number" min="0" inputMode="numeric" placeholder="e.g. 5000"
                         className="input font-mono py-1 text-sm flex-1"
                         value={i.manualPrice}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          // call parent setManualPrice via updateQty trick — pass through props
-                        }}
+                        onChange={(e) => setManualPrice(id, e.target.value)}
                       />
                     </div>
                   )}
@@ -814,6 +811,7 @@ export default function Sell() {
         unitPriceFor={unitPriceFor}
         displayName={displayName}
         lineId={lineId}
+        setManualPrice={setManualPrice}
         canSeeProfit={canSeeProfit}
         total={total}
         totalProfit={totalProfit}
