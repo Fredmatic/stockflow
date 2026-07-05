@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
+import Toast from '../components/Toast'
 import { enqueueSale, getQueue, removeFromQueue } from '../lib/offlineQueue'
 
 function lineId(item) {
@@ -136,7 +137,7 @@ function CartDrawer({
   selectedCustomer, setSelectedCustomer, customers, customerSearch,
   setCustomerSearch, filteredCustomers, addingCustomer, setAddingCustomer,
   newCustomerName, setNewCustomerName, newCustomerPhone, setNewCustomerPhone,
-  createCustomer, customerBusy, completeSale, busy, message, lastReceipt,
+  createCustomer, customerBusy, completeSale, busy,
 }) {
   if (!open) return null
   return (
@@ -151,22 +152,6 @@ function CartDrawer({
         </div>
 
         <div className="sell-drawer-body">
-          {message && (
-            <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2">
-              <p className="text-sm text-brand-dark">{message}</p>
-              {lastReceipt && !message.startsWith('Error') && (
-                <button
-                  onClick={() => shareReceiptWhatsApp(lastReceipt)}
-                  className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
-                  </svg>
-                  Share receipt on WhatsApp
-                </button>
-              )}
-            </div>
-          )}
 
           <div className="card divide-y divide-line mb-4">
             {cart.map((i) => {
@@ -330,6 +315,7 @@ export default function Sell() {
   const [cart, setCart] = useState([])
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [messageType, setMessageType] = useState('info')
   const [lastReceipt, setLastReceipt] = useState(null)
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [pendingCount, setPendingCount] = useState(0)
@@ -352,6 +338,12 @@ export default function Sell() {
   const [newCustomerName, setNewCustomerName] = useState('')
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
   const [customerBusy, setCustomerBusy] = useState(false)
+
+  function notify(type, text) {
+    setMessageType(type)
+    setMessage(text)
+  }
+
 
   useEffect(() => {
     if (business) {
@@ -414,9 +406,9 @@ export default function Sell() {
     setPendingCount(getQueue().length)
     setSyncing(false)
     if (shortfallMessages.length > 0) {
-      setMessage(`⚠ Synced, but please check stock: ${shortfallMessages.join(' ')}`)
+      notify('warning', `⚠ Synced, but please check stock: ${shortfallMessages.join(' ')}`)
     } else if (queue.length > getQueue().length) {
-      setMessage(`✓ Synced ${queue.length - getQueue().length} offline sale${queue.length - getQueue().length === 1 ? '' : 's'}.`)
+      notify('success', `✓ Synced ${queue.length - getQueue().length} offline sale${queue.length - getQueue().length === 1 ? '' : 's'}.`)
       setTimeout(() => setMessage(''), 5000)
     }
   }
@@ -436,7 +428,7 @@ export default function Sell() {
       .insert({ business_id: business.id, name: newCustomerName.trim(), phone: newCustomerPhone || null })
       .select().single()
     setCustomerBusy(false)
-    if (err) { setMessage(`Error: ${err.message}`); return }
+    if (err) { notify('error', `Error: ${err.message}`); return }
     setCustomers((c) => [...c, data])
     setSelectedCustomer(data)
     setAddingCustomer(false)
@@ -468,13 +460,13 @@ export default function Sell() {
       const existing = c.find((i) => lineId(i.item) === lineId(item))
       if (existing) {
         if (existing.quantity >= available) {
-          setMessage(`Error: only ${available} of ${displayName(item)} in stock.`)
+          notify('error', `Error: only ${available} of ${displayName(item)} in stock.`)
           return c
         }
         added = true
         return c.map((i) => lineId(i.item) === lineId(item) ? { ...i, quantity: i.quantity + 1 } : i)
       }
-      if (available <= 0) { setMessage(`Error: ${displayName(item)} is out of stock.`); return c }
+      if (available <= 0) { notify('error', `Error: ${displayName(item)} is out of stock.`); return c }
       added = true
       return [...c, { item, quantity: 1, manualPrice: hasPrice ? null : '' }]
     })
@@ -517,7 +509,7 @@ export default function Sell() {
       c.map((i) => {
         if (lineId(i.item) !== id) return i
         const available = i.item.quantity_on_hand ?? 0
-        if (qty > available) { setMessage(`Error: only ${available} in stock.`); return i }
+        if (qty > available) { notify('error', `Error: only ${available} in stock.`); return i }
         return { ...i, quantity: qty }
       }).filter((i) => i.quantity > 0)
     )
@@ -531,8 +523,8 @@ export default function Sell() {
     if (cart.length === 0) return
     if (submittingRef.current) return // already mid-submit — ignore the double-tap
     const missingPrice = cart.find((i) => unitPriceFor(i) <= 0)
-    if (missingPrice) { setMessage(`Error: enter a price for ${displayName(missingPrice.item)}.`); return }
-    if (paymentMethod === 'credit' && !selectedCustomer) { setMessage('Error: pick or add a customer.'); return }
+    if (missingPrice) { notify('error', `Error: enter a price for ${displayName(missingPrice.item)}.`); return }
+    if (paymentMethod === 'credit' && !selectedCustomer) { notify('error', 'Error: pick or add a customer.'); return }
     submittingRef.current = true
     setBusy(true)
 
@@ -561,14 +553,15 @@ export default function Sell() {
 
     function onSuccess(shortfalls) {
       if (shortfalls.length > 0) {
-        setMessage(`⚠ Sale done, but check stock: ${shortfalls.map((s) => s.name).join(', ')}.`)
+        notify('warning', `✓ Sale recorded, but check stock: ${shortfalls.map((s) => s.name).join(', ')}.`)
       } else {
-        setMessage(
+        notify(
+          'success',
           paymentMethod === 'credit'
-            ? `Credit sale for ${selectedCustomer.name} — UGX ${total.toLocaleString()}`
+            ? `✓ Credit sale recorded for ${selectedCustomer.name} — UGX ${total.toLocaleString()}`
             : canSeeProfit
-              ? `Sale done — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
-              : `Sale done — UGX ${total.toLocaleString()}`
+              ? `✓ Sale recorded — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
+              : `✓ Sale recorded — UGX ${total.toLocaleString()}`
         )
       }
       setLastReceipt(receiptData)
@@ -580,7 +573,7 @@ export default function Sell() {
     function onOffline() {
       enqueueSale(saleData)
       setPendingCount(getQueue().length)
-      setMessage(`📴 No connection — sale saved and will sync automatically (UGX ${total.toLocaleString()}).`)
+      notify('offline', `Sale saved offline — will sync automatically (UGX ${total.toLocaleString()}).`)
       setLastReceipt(receiptData)
       setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
       setShowCartDrawer(false)
@@ -601,8 +594,25 @@ export default function Sell() {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────
+  const receiptAction = lastReceipt && messageType !== 'error' && (
+    <button onClick={() => shareReceiptWhatsApp(lastReceipt)}
+      className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
+      </svg>
+      Share receipt on WhatsApp
+    </button>
+  )
+
   return (
     <>
+      <Toast
+        type={messageType}
+        message={message}
+        action={receiptAction}
+        onDismiss={() => { setMessage(''); setLastReceipt(null) }}
+      />
+
       <div className="grid md:grid-cols-2 gap-6">
         {(!isOnline || pendingCount > 0) && (
           <div className="md:col-span-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-700 rounded-md px-4 py-2 text-sm font-medium">
@@ -620,18 +630,6 @@ export default function Sell() {
         <div>
           <h1 className="font-display text-xl font-semibold mb-1">Sell</h1>
           <p className="text-muted text-sm mb-4">Tap a product to add it to the sale.</p>
-
-          {message && (
-            <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2 md:hidden">
-              <p className="text-sm text-brand-dark">{message}</p>
-              {lastReceipt && !message.startsWith('Error') && (
-                <button onClick={() => shareReceiptWhatsApp(lastReceipt)}
-                  className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
-                  Share receipt on WhatsApp
-                </button>
-              )}
-            </div>
-          )}
 
           <div className="flex gap-2 mb-3">
             <input className="input flex-1" placeholder="Search product…"
@@ -681,21 +679,6 @@ export default function Sell() {
           <div className="mb-3 pb-2 ledger-rule">
             <h2 className="font-display text-sm font-semibold">Current sale</h2>
           </div>
-
-          {message && (
-            <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2">
-              <p className="text-sm text-brand-dark">{message}</p>
-              {lastReceipt && !message.startsWith('Error') && (
-                <button onClick={() => shareReceiptWhatsApp(lastReceipt)}
-                  className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
-                  </svg>
-                  Share receipt on WhatsApp
-                </button>
-              )}
-            </div>
-          )}
 
           {cart.length === 0 ? (
             <p className="card px-4 py-8 text-center text-sm text-muted">No items added yet.</p>
@@ -857,8 +840,6 @@ export default function Sell() {
         customerBusy={customerBusy}
         completeSale={completeSale}
         busy={busy}
-        message={message}
-        lastReceipt={lastReceipt}
       />
 
       {scanning && <ScannerModal onResult={handleScan} onClose={() => setScanning(false)} />}
