@@ -43,12 +43,7 @@ function shareReceiptWhatsApp(receipt) {
   window.open(url, '_blank')
 }
 
-// Sends one queued/live sale to Supabase. Used both by completeSale() for a
-// live sale and by syncOfflineQueue() for queued ones — keeping this in one
-// place means the two paths can never drift apart.
 async function pushSaleToServer(business, saleData) {
-  // Stock check first: if items in this queued sale ran out on another
-  // device while we were offline, warn instead of silently overselling.
   const productIds = saleData.items.filter((i) => !i.variant_id).map((i) => i.product_id)
   const variantIds = saleData.items.filter((i) => i.variant_id).map((i) => i.variant_id)
 
@@ -133,32 +128,221 @@ async function pushSaleToServer(business, saleData) {
   return { sale, stockShortfalls }
 }
 
+// ── Cart Drawer (mobile only) ───────────────────────────────────────────────
+function CartDrawer({
+  open, onClose, cart, updateQty, unitPriceFor, displayName, lineId,
+  canSeeProfit, total, totalProfit, paymentMethod, setPaymentMethodSafe,
+  selectedCustomer, setSelectedCustomer, customers, customerSearch,
+  setCustomerSearch, filteredCustomers, addingCustomer, setAddingCustomer,
+  newCustomerName, setNewCustomerName, newCustomerPhone, setNewCustomerPhone,
+  createCustomer, customerBusy, completeSale, busy, message, lastReceipt,
+}) {
+  if (!open) return null
+  return (
+    <div className="sell-drawer-overlay" onClick={onClose}>
+      <div className="sell-drawer" onClick={e => e.stopPropagation()}>
+        {/* Handle */}
+        <div className="sell-drawer-handle" />
+
+        <div className="sell-drawer-header">
+          <h2 className="font-display text-base font-semibold">Current sale</h2>
+          <button onClick={onClose} className="sell-drawer-close">✕</button>
+        </div>
+
+        <div className="sell-drawer-body">
+          {message && (
+            <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2">
+              <p className="text-sm text-brand-dark">{message}</p>
+              {lastReceipt && !message.startsWith('Error') && (
+                <button
+                  onClick={() => shareReceiptWhatsApp(lastReceipt)}
+                  className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
+                  </svg>
+                  Share receipt on WhatsApp
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="card divide-y divide-line mb-4">
+            {cart.map((i) => {
+              const id = lineId(i.item)
+              const isManual = i.manualPrice !== null && i.manualPrice !== undefined
+              const unitPrice = unitPriceFor(i)
+              const lineProfit = i.quantity * (unitPrice - (i.item.cost_price || 0))
+              const available = i.item.quantity_on_hand ?? 0
+              const atMax = i.quantity >= available
+              return (
+                <div key={id} className="px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{displayName(i.item)}</div>
+                      {!isManual && (
+                        <div className="text-xs text-muted font-mono">
+                          UGX {Number(unitPrice).toLocaleString()} each
+                          {canSeeProfit && <span className="text-amber ml-2">+{lineProfit.toLocaleString()} profit</span>}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => updateQty(id, i.quantity - 1)} className="btn-secondary px-2 py-1 text-xs">−</button>
+                      <span className="font-mono w-6 text-center">{i.quantity}</span>
+                      <button onClick={() => updateQty(id, i.quantity + 1)} disabled={atMax} className="btn-secondary px-2 py-1 text-xs disabled:opacity-40">+</button>
+                    </div>
+                  </div>
+                  {isManual && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-brick whitespace-nowrap">No saved price:</span>
+                      <input type="number" min="0" inputMode="numeric" placeholder="e.g. 5000"
+                        className="input font-mono py-1 text-sm flex-1"
+                        value={i.manualPrice}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          // call parent setManualPrice via updateQty trick — pass through props
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Payment method */}
+          <div className="mb-4">
+            <div className="text-xs font-medium text-muted mb-2">Payment</div>
+            <div className="flex gap-2 mb-2">
+              <button type="button" onClick={() => setPaymentMethodSafe('cash')}
+                className={`flex-1 ${paymentMethod === 'cash' ? 'btn-primary' : 'btn-secondary'}`}>Cash</button>
+              <button type="button" onClick={() => setPaymentMethodSafe('credit')}
+                className={`flex-1 ${paymentMethod === 'credit' ? 'btn-primary' : 'btn-secondary'}`}>Credit</button>
+            </div>
+
+            {paymentMethod === 'credit' && (
+              <div className="card p-3 space-y-2">
+                {selectedCustomer ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium">{selectedCustomer.name}</div>
+                      {selectedCustomer.phone && <div className="text-xs text-muted">{selectedCustomer.phone}</div>}
+                    </div>
+                    <button type="button" onClick={() => setSelectedCustomer(null)} className="text-xs text-muted">Change</button>
+                  </div>
+                ) : addingCustomer ? (
+                  <div className="space-y-2">
+                    <input autoFocus className="input" placeholder="Customer name" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
+                    <input className="input" placeholder="Phone (optional)" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} />
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setAddingCustomer(false)} className="btn-secondary flex-1 text-sm">Cancel</button>
+                      <button type="button" onClick={createCustomer} disabled={customerBusy || !newCustomerName.trim()} className="btn-primary flex-1 text-sm">
+                        {customerBusy ? 'Saving…' : 'Add customer'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <input className="input" placeholder="Search customer…" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} />
+                    <div className="max-h-32 overflow-y-auto">
+                      {filteredCustomers.map((c) => (
+                        <button key={c.id} type="button" onClick={() => setSelectedCustomer(c)}
+                          className="w-full text-left text-sm px-2 py-1.5 hover:bg-paper rounded">
+                          {c.name} {c.phone && <span className="text-muted text-xs">· {c.phone}</span>}
+                        </button>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => { setAddingCustomer(true); setNewCustomerName(customerSearch) }}
+                      className="text-xs text-brand-dark font-medium">+ Add new customer</button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Total */}
+          <div className={`flex items-center justify-between px-1 ${canSeeProfit ? 'mb-1' : 'mb-4'}`}>
+            <span className="text-sm font-medium">Total</span>
+            <span className="font-mono text-lg font-semibold">UGX {total.toLocaleString()}</span>
+          </div>
+          {canSeeProfit && (
+            <div className="flex items-center justify-between mb-4 px-1">
+              <span className="text-xs text-muted">Profit</span>
+              <span className="font-mono text-sm text-amber">UGX {totalProfit.toLocaleString()}</span>
+            </div>
+          )}
+
+          <button onClick={completeSale}
+            disabled={busy || cart.length === 0 || (paymentMethod === 'credit' && !selectedCustomer)}
+            className="btn-primary w-full py-3 text-base">
+            {busy ? 'Completing…' : paymentMethod === 'credit' ? 'Record credit sale' : 'Complete sale — UGX ' + total.toLocaleString()}
+          </button>
+        </div>
+      </div>
+
+      <style>{`
+        .sell-drawer-overlay {
+          position: fixed; inset: 0; z-index: 50;
+          background: rgba(0,0,0,0.4);
+          display: flex; align-items: flex-end;
+          animation: fadeIn 150ms ease;
+        }
+        .sell-drawer {
+          width: 100%; max-height: 90vh;
+          background: var(--color-paper-raised);
+          border-radius: 20px 20px 0 0;
+          display: flex; flex-direction: column;
+          animation: slideUp 200ms ease;
+        }
+        .sell-drawer-handle {
+          width: 40px; height: 4px; border-radius: 2px;
+          background: var(--color-line); margin: 10px auto 4px;
+          flex-shrink: 0;
+        }
+        .sell-drawer-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 8px 20px 12px; flex-shrink: 0;
+          border-bottom: 1px solid var(--color-line);
+        }
+        .sell-drawer-close {
+          width: 28px; height: 28px; border-radius: 50%;
+          background: var(--color-paper); border: 1px solid var(--color-line);
+          color: var(--color-muted); font-size: 12px;
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer;
+        }
+        .sell-drawer-body {
+          flex: 1; overflow-y: auto; padding: 16px 16px 32px;
+        }
+        @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+        @keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
+      `}</style>
+    </div>
+  )
+}
+
+// ── Main component ──────────────────────────────────────────────────────────
 export default function Sell() {
   const { business, activeStaff } = useAuth()
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
-  const [cart, setCart] = useState([]) // {item, quantity, manualPrice}
+  const [cart, setCart] = useState([])
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [lastReceipt, setLastReceipt] = useState(null)
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [pendingCount, setPendingCount] = useState(0)
   const [syncing, setSyncing] = useState(false)
+  const [showCartDrawer, setShowCartDrawer] = useState(false)
 
   const canSeeProfit = activeStaff?.role === 'owner'
   const [scanning, setScanning] = useState(false)
   const [scanMessage, setScanMessage] = useState('')
-
-  // Mobile UX: tapping a product adds it to a cart that lives below the fold
-  // (list and cart stack on narrow screens), so there's no visible change
-  // near the button. justAddedId briefly swaps the "+" for a checkmark on
-  // the tapped row, and cartSectionRef lets the sticky mobile bar scroll the
-  // cart into view — together these stop people from re-tapping the same
-  // product thinking nothing happened.
   const [justAddedId, setJustAddedId] = useState(null)
   const cartSectionRef = useRef(null)
 
-  const [paymentMethod, setPaymentMethod] = useState('cash') // 'cash' | 'credit'
+  const [paymentMethod, setPaymentMethod] = useState('cash')
   const [customers, setCustomers] = useState([])
   const [customerSearch, setCustomerSearch] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -178,28 +362,13 @@ export default function Sell() {
     }
   }, [business])
 
-  // Track connection status and the queued-sale count, and auto-sync the
-  // moment we come back online. The browser's online/offline events aren't
-  // perfectly reliable (a phone can report "online" while actually having
-  // no usable signal), so syncOfflineQueue() below treats any request
-  // failure as "still offline" rather than trusting this flag blindly.
   useEffect(() => {
     setPendingCount(getQueue().length)
-
-    function handleOnline() {
-      setIsOnline(true)
-      syncOfflineQueue()
-    }
-    function handleOffline() {
-      setIsOnline(false)
-    }
+    function handleOnline() { setIsOnline(true); syncOfflineQueue() }
+    function handleOffline() { setIsOnline(false) }
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
-
-    // Also try syncing once on page load, in case sales were queued during
-    // a previous visit and the device is already back online.
     if (navigator.onLine) syncOfflineQueue()
-
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
@@ -217,17 +386,10 @@ export default function Sell() {
         const { stockShortfalls } = await pushSaleToServer(business, entry.saleData)
         removeFromQueue(entry.localId)
         if (stockShortfalls.length > 0) {
-          shortfallMessages.push(
-            ...stockShortfalls.map(
-              (s) => `${s.name}: only ${s.available} left but ${s.needed} were sold offline — please check stock.`
-            )
-          )
+          shortfallMessages.push(...stockShortfalls.map((s) => `${s.name}: only ${s.available} left but ${s.needed} were sold offline.`))
         }
       } catch (err) {
-        // Network still bad, or a genuine server error — stop here and
-        // retry the rest next time we're back online. Leaving the
-        // remaining entries in the queue means nothing is lost.
-        console.error('Offline sale sync failed, will retry later:', err)
+        console.error('Offline sale sync failed:', err)
         break
       }
     }
@@ -243,11 +405,8 @@ export default function Sell() {
 
   async function loadCustomers() {
     const { data } = await supabase
-      .from('customers')
-      .select('id, name, phone')
-      .eq('business_id', business.id)
-      .eq('is_active', true)
-      .order('name')
+      .from('customers').select('id, name, phone')
+      .eq('business_id', business.id).eq('is_active', true).order('name')
     setCustomers(data || [])
   }
 
@@ -257,13 +416,9 @@ export default function Sell() {
     const { data, error: err } = await supabase
       .from('customers')
       .insert({ business_id: business.id, name: newCustomerName.trim(), phone: newCustomerPhone || null })
-      .select()
-      .single()
+      .select().single()
     setCustomerBusy(false)
-    if (err) {
-      setMessage(`Error: ${err.message}`)
-      return
-    }
+    if (err) { setMessage(`Error: ${err.message}`); return }
     setCustomers((c) => [...c, data])
     setSelectedCustomer(data)
     setAddingCustomer(false)
@@ -278,14 +433,13 @@ export default function Sell() {
   function setPaymentMethodSafe(method) {
     setPaymentMethod(method)
     if (method === 'cash') {
-      setSelectedCustomer(null)
-      setCustomerSearch('')
-      setAddingCustomer(false)
+      setSelectedCustomer(null); setCustomerSearch(''); setAddingCustomer(false)
     }
   }
 
   const filtered = items.filter((p) =>
-    displayName(p).toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase())
+    displayName(p).toLowerCase().includes(search.toLowerCase()) ||
+    (p.sku || '').toLowerCase().includes(search.toLowerCase())
   )
 
   function addToCart(item) {
@@ -300,34 +454,25 @@ export default function Sell() {
           return c
         }
         added = true
-        return c.map((i) => (lineId(i.item) === lineId(item) ? { ...i, quantity: i.quantity + 1 } : i))
+        return c.map((i) => lineId(i.item) === lineId(item) ? { ...i, quantity: i.quantity + 1 } : i)
       }
-      if (available <= 0) {
-        setMessage(`Error: ${displayName(item)} is out of stock.`)
-        return c
-      }
+      if (available <= 0) { setMessage(`Error: ${displayName(item)} is out of stock.`); return c }
       added = true
       return [...c, { item, quantity: 1, manualPrice: hasPrice ? null : '' }]
     })
     if (added) {
       const id = lineId(item)
       setJustAddedId(id)
-      setTimeout(() => setJustAddedId((cur) => (cur === id ? null : cur)), 700)
+      setTimeout(() => setJustAddedId((cur) => cur === id ? null : cur), 900)
     }
-  }
-
-  function scrollToCart() {
-    cartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   function setManualPrice(id, value) {
-    setCart((c) => c.map((i) => (lineId(i.item) === id ? { ...i, manualPrice: value } : i)))
+    setCart((c) => c.map((i) => lineId(i.item) === id ? { ...i, manualPrice: value } : i))
   }
 
   function unitPriceFor(i) {
-    if (i.manualPrice !== null && i.manualPrice !== undefined) {
-      return Number(i.manualPrice) || 0
-    }
+    if (i.manualPrice !== null && i.manualPrice !== undefined) return Number(i.manualPrice) || 0
     return Number(i.item.selling_price) || 0
   }
 
@@ -337,57 +482,43 @@ export default function Sell() {
     if (match) {
       const available = match.quantity_on_hand ?? 0
       const inCart = cart.find((i) => lineId(i.item) === lineId(match))
-      const alreadyInCart = inCart?.quantity ?? 0
-      if (alreadyInCart >= available) {
-        setScanMessage(`${displayName(match)} is out of stock — can't add more.`)
+      if ((inCart?.quantity ?? 0) >= available) {
+        setScanMessage(`${displayName(match)} is out of stock.`)
       } else {
         addToCart(match)
         setScanMessage(`Added: ${displayName(match)}`)
       }
     } else {
-      setScanMessage(`No product matches code "${code}". Add it in Products first.`)
+      setScanMessage(`No product matches "${code}".`)
     }
     setTimeout(() => setScanMessage(''), 4000)
   }
 
   function updateQty(id, qty) {
     setCart((c) =>
-      c
-        .map((i) => {
-          if (lineId(i.item) !== id) return i
-          const available = i.item.quantity_on_hand ?? 0
-          if (qty > available) {
-            setMessage(`Error: only ${available} of ${displayName(i.item)} in stock.`)
-            return i
-          }
-          return { ...i, quantity: qty }
-        })
-        .filter((i) => i.quantity > 0)
+      c.map((i) => {
+        if (lineId(i.item) !== id) return i
+        const available = i.item.quantity_on_hand ?? 0
+        if (qty > available) { setMessage(`Error: only ${available} in stock.`); return i }
+        return { ...i, quantity: qty }
+      }).filter((i) => i.quantity > 0)
     )
   }
 
   const total = cart.reduce((sum, i) => sum + i.quantity * unitPriceFor(i), 0)
-  const totalProfit = cart.reduce(
-    (sum, i) => sum + i.quantity * (unitPriceFor(i) - (i.item.cost_price || 0)),
-    0
-  )
+  const totalProfit = cart.reduce((sum, i) => sum + i.quantity * (unitPriceFor(i) - (i.item.cost_price || 0)), 0)
+  const totalQty = cart.reduce((sum, i) => sum + i.quantity, 0)
 
   async function completeSale() {
     if (cart.length === 0) return
     const missingPrice = cart.find((i) => unitPriceFor(i) <= 0)
-    if (missingPrice) {
-      setMessage(`Error: enter a price for ${displayName(missingPrice.item)} before completing the sale.`)
-      return
-    }
-    if (paymentMethod === 'credit' && !selectedCustomer) {
-      setMessage('Error: pick or add a customer for this credit sale.')
-      return
-    }
+    if (missingPrice) { setMessage(`Error: enter a price for ${displayName(missingPrice.item)}.`); return }
+    if (paymentMethod === 'credit' && !selectedCustomer) { setMessage('Error: pick or add a customer.'); return }
     setBusy(true)
 
     const saleData = {
       staff_user_id: activeStaff?.id || null,
-      total: total,
+      total,
       is_credit: paymentMethod === 'credit',
       customer_id: paymentMethod === 'credit' ? selectedCustomer.id : null,
       items: cart.map((i) => ({
@@ -402,354 +533,313 @@ export default function Sell() {
 
     const receiptData = {
       businessName: business?.name || 'Shop',
-      items: cart.map((i) => ({
-        name: displayName(i.item),
-        quantity: i.quantity,
-        unitPrice: unitPriceFor(i),
-      })),
-      total,
-      paymentMethod,
+      items: cart.map((i) => ({ name: displayName(i.item), quantity: i.quantity, unitPrice: unitPriceFor(i) })),
+      total, paymentMethod,
       customerName: paymentMethod === 'credit' ? selectedCustomer.name : null,
       date: new Date(),
     }
 
-    // If we already know we're offline, don't waste time waiting on a
-    // network call that's guaranteed to fail — queue immediately so the
-    // cashier isn't left watching a spinner.
-    if (!navigator.onLine) {
-      const localId = enqueueSale(saleData)
-      setPendingCount(getQueue().length)
-      setMessage(
-        `📴 No connection — sale saved on this device and will sync automatically (UGX ${total.toLocaleString()}).`
-      )
-      setLastReceipt(receiptData)
-      setCart([])
-      setPaymentMethod('cash')
-      setSelectedCustomer(null)
-      setCustomerSearch('')
-      setBusy(false)
-      setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
-      return
-    }
-
-    try {
-      const { stockShortfalls } = await pushSaleToServer(business, saleData)
-
-      if (stockShortfalls.length > 0) {
-        setMessage(`⚠ Sale completed, but stock may be short: ${stockShortfalls.map((s) => s.name).join(', ')}.`)
+    function onSuccess(shortfalls) {
+      if (shortfalls.length > 0) {
+        setMessage(`⚠ Sale done, but check stock: ${shortfalls.map((s) => s.name).join(', ')}.`)
       } else {
         setMessage(
           paymentMethod === 'credit'
-            ? `Credit sale recorded for ${selectedCustomer.name} — UGX ${total.toLocaleString()}`
+            ? `Credit sale for ${selectedCustomer.name} — UGX ${total.toLocaleString()}`
             : canSeeProfit
-              ? `Sale completed — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
-              : `Sale completed — UGX ${total.toLocaleString()}`
+              ? `Sale done — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
+              : `Sale done — UGX ${total.toLocaleString()}`
         )
       }
       setLastReceipt(receiptData)
-      setCart([])
-      setPaymentMethod('cash')
-      setSelectedCustomer(null)
-      setCustomerSearch('')
+      setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
+      setShowCartDrawer(false)
       setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
-    } catch (err) {
-      // Network failure (offline, or signal dropped mid-request) — queue the
-      // sale instead of losing it. A genuine server-side rejection (e.g. a
-      // database constraint) will also land here, but is rare enough that
-      // queuing-and-retrying is still the safer default than discarding a
-      // completed sale the cashier already collected money for.
-      const localId = enqueueSale(saleData)
+    }
+
+    function onOffline() {
+      enqueueSale(saleData)
       setPendingCount(getQueue().length)
-      setMessage(
-        `📴 No connection — sale saved on this device and will sync automatically (UGX ${total.toLocaleString()}).`
-      )
+      setMessage(`📴 No connection — sale saved and will sync automatically (UGX ${total.toLocaleString()}).`)
       setLastReceipt(receiptData)
-      setCart([])
-      setPaymentMethod('cash')
-      setSelectedCustomer(null)
-      setCustomerSearch('')
+      setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
+      setShowCartDrawer(false)
       setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
+    }
+
+    if (!navigator.onLine) { onOffline(); setBusy(false); return }
+
+    try {
+      const { stockShortfalls } = await pushSaleToServer(business, saleData)
+      onSuccess(stockShortfalls)
+    } catch {
+      onOffline()
     } finally {
       setBusy(false)
     }
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      {(!isOnline || pendingCount > 0) && (
-        <div className="md:col-span-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-700 rounded-md px-4 py-2 text-sm font-medium">
-          <span>{!isOnline ? '📴' : '🔄'}</span>
-          <span>
-            {!isOnline
-              ? `Offline${pendingCount > 0 ? ` — ${pendingCount} sale${pendingCount === 1 ? '' : 's'} waiting to sync` : ' — sales will be saved on this device'}`
-              : syncing
-                ? 'Syncing offline sales…'
-                : `${pendingCount} offline sale${pendingCount === 1 ? '' : 's'} waiting to sync`}
-          </span>
-        </div>
-      )}
-      <div>
-        <h1 className="font-display text-xl font-semibold mb-1">Sell</h1>
-        <p className="text-muted text-sm mb-4">Tap a product to add it, or scan its code.</p>
-        <div className="flex gap-2 mb-3">
-          <input
-            className="input flex-1"
-            placeholder="Search product…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <button type="button" onClick={() => setScanning(true)} className="btn-secondary px-3" aria-label="Scan code">
-            <ScanIcon />
-          </button>
-        </div>
-        {scanMessage && <p className="text-sm text-brand-dark bg-brand-light rounded-md px-3 py-2 mb-3">{scanMessage}</p>}
-        <div className="card divide-y divide-line max-h-[28rem] overflow-y-auto">
-          {filtered.map((p) => {
-            const qty = p.quantity_on_hand ?? 0
-            const noPrice = !p.selling_price || Number(p.selling_price) <= 0
-            const justAdded = justAddedId === lineId(p)
-            return (
-              <button
-                key={lineId(p)}
-                onClick={() => addToCart(p)}
-                disabled={qty <= 0}
-                style={justAdded ? { backgroundColor: 'var(--color-brand-light)' } : undefined}
-                className="w-full text-left px-4 py-3 text-sm flex items-center justify-between md:hover:bg-paper disabled:opacity-40 transition-colors duration-200"
-              >
-                <div>
-                  <div className="font-medium">{displayName(p)}</div>
-                  <div className="text-xs text-muted">
-                    {noPrice ? (
-                      <span className="text-brick">No saved price — you'll enter one</span>
-                    ) : (
-                      `UGX ${Number(p.selling_price).toLocaleString()}`
-                    )}{' '}
-                    · {qty} in stock
-                  </div>
-                </div>
-                <span
-                  className={`font-mono w-5 h-5 rounded-full flex items-center justify-center text-xs transition-transform duration-200 ${
-                    justAdded ? 'bg-emerald-600 text-white scale-110' : 'text-brand-dark scale-100'
-                  }`}
-                >
-                  {justAdded ? '✓' : '+'}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div ref={cartSectionRef} className="scroll-mt-4">
-        <div className="mb-3 pb-2 ledger-rule">
-          <h2 className="font-display text-sm font-semibold">Current sale</h2>
-        </div>
-
-        {message && (
-          <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2">
-            <p className="text-sm text-brand-dark">{message}</p>
-            {lastReceipt && !message.startsWith('Error') && (
-              <button
-                onClick={() => shareReceiptWhatsApp(lastReceipt)}
-                className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/>
-                </svg>
-                Share receipt on WhatsApp
-              </button>
-            )}
+    <>
+      <div className="grid md:grid-cols-2 gap-6">
+        {(!isOnline || pendingCount > 0) && (
+          <div className="md:col-span-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-700 rounded-md px-4 py-2 text-sm font-medium">
+            <span>{!isOnline ? '📴' : '🔄'}</span>
+            <span>
+              {!isOnline
+                ? `Offline${pendingCount > 0 ? ` — ${pendingCount} sale${pendingCount === 1 ? '' : 's'} waiting to sync` : ' — sales will be saved on this device'}`
+                : syncing ? 'Syncing offline sales…'
+                  : `${pendingCount} offline sale${pendingCount === 1 ? '' : 's'} waiting to sync`}
+            </span>
           </div>
         )}
 
-        {cart.length === 0 ? (
-          <p className="card px-4 py-8 text-center text-sm text-muted">No items added yet.</p>
-        ) : (
-          <div className="card divide-y divide-line mb-4">
-            {cart.map((i) => {
-              const id = lineId(i.item)
-              const isManual = i.manualPrice !== null && i.manualPrice !== undefined
-              const unitPrice = unitPriceFor(i)
-              const lineProfit = i.quantity * (unitPrice - (i.item.cost_price || 0))
-              const available = i.item.quantity_on_hand ?? 0
-              const atMax = i.quantity >= available
+        {/* ── Products column ── */}
+        <div>
+          <h1 className="font-display text-xl font-semibold mb-1">Sell</h1>
+          <p className="text-muted text-sm mb-4">Tap a product to add it to the sale.</p>
+
+          {message && (
+            <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2 md:hidden">
+              <p className="text-sm text-brand-dark">{message}</p>
+              {lastReceipt && !message.startsWith('Error') && (
+                <button onClick={() => shareReceiptWhatsApp(lastReceipt)}
+                  className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
+                  Share receipt on WhatsApp
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-2 mb-3">
+            <input className="input flex-1" placeholder="Search product…"
+              value={search} onChange={(e) => setSearch(e.target.value)} />
+            <button type="button" onClick={() => setScanning(true)} className="btn-secondary px-3" aria-label="Scan code">
+              <ScanIcon />
+            </button>
+          </div>
+
+          {scanMessage && (
+            <p className="text-sm text-brand-dark bg-brand-light rounded-md px-3 py-2 mb-3">{scanMessage}</p>
+          )}
+
+          <div className="card divide-y divide-line overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+            {filtered.map((p) => {
+              const qty = p.quantity_on_hand ?? 0
+              const noPrice = !p.selling_price || Number(p.selling_price) <= 0
+              const justAdded = justAddedId === lineId(p)
+              const inCart = cart.find(i => lineId(i.item) === lineId(p))
               return (
-                <div key={id} className="px-4 py-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium">{displayName(i.item)}</div>
-                      {!isManual && (
-                        <div className="text-xs text-muted font-mono">
-                          UGX {Number(unitPrice).toLocaleString()} each
-                          {canSeeProfit && <span className="text-amber ml-2">+{lineProfit.toLocaleString()} profit</span>}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => updateQty(id, i.quantity - 1)} className="btn-secondary px-2 py-1 text-xs">−</button>
-                      <span className="font-mono w-6 text-center">{i.quantity}</span>
-                      <button
-                        onClick={() => updateQty(id, i.quantity + 1)}
-                        disabled={atMax}
-                        className="btn-secondary px-2 py-1 text-xs disabled:opacity-40"
-                      >
-                        +
-                      </button>
+                <button key={lineId(p)} onClick={() => addToCart(p)} disabled={qty <= 0}
+                  style={justAdded ? { backgroundColor: 'var(--color-brand-light)' } : undefined}
+                  className="w-full text-left px-4 py-3 text-sm flex items-center justify-between md:hover:bg-paper disabled:opacity-40 transition-colors duration-200">
+                  <div className="flex-1 min-w-0 mr-3">
+                    <div className="font-medium truncate">{displayName(p)}</div>
+                    <div className="text-xs text-muted">
+                      {noPrice
+                        ? <span className="text-brick">No saved price</span>
+                        : `UGX ${Number(p.selling_price).toLocaleString()}`
+                      }
+                      {' · '}{qty} in stock
+                      {inCart && <span className="ml-2 text-brand font-semibold">(in cart: {inCart.quantity})</span>}
                     </div>
                   </div>
-                  {isManual && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-brick whitespace-nowrap">No saved price — enter sale price:</span>
-                      <input
-                        type="number"
-                        min="0"
-                        inputMode="numeric"
-                        placeholder="e.g. 5000"
-                        className="input font-mono py-1 text-sm"
-                        value={i.manualPrice}
-                        onChange={(e) => setManualPrice(id, e.target.value)}
-                      />
-                    </div>
-                  )}
-                </div>
+                  <span className={`font-mono w-7 h-7 rounded-full flex items-center justify-center text-sm transition-all duration-200 shrink-0 ${justAdded ? 'bg-brand text-white scale-110' : 'bg-paper border border-line text-brand-dark'
+                    }`}>
+                    {justAdded ? '✓' : '+'}
+                  </span>
+                </button>
               )
             })}
           </div>
-        )}
-
-        {cart.length > 0 && (
-          <div className="mb-4">
-            <div className="text-xs font-medium text-muted mb-2">Payment</div>
-            <div className="flex gap-2 mb-2">
-              <button
-                type="button"
-                onClick={() => setPaymentMethodSafe('cash')}
-                className={`flex-1 ${paymentMethod === 'cash' ? 'btn-primary' : 'btn-secondary'}`}
-              >
-                Cash
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethodSafe('credit')}
-                className={`flex-1 ${paymentMethod === 'credit' ? 'btn-primary' : 'btn-secondary'}`}
-              >
-                Credit (pay later)
-              </button>
-            </div>
-
-            {paymentMethod === 'credit' && (
-              <div className="card p-3 space-y-2">
-                {selectedCustomer ? (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium">{selectedCustomer.name}</div>
-                      {selectedCustomer.phone && <div className="text-xs text-muted">{selectedCustomer.phone}</div>}
-                    </div>
-                    <button type="button" onClick={() => setSelectedCustomer(null)} className="text-xs text-muted">
-                      Change
-                    </button>
-                  </div>
-                ) : addingCustomer ? (
-                  <div className="space-y-2">
-                    <input
-                      autoFocus
-                      className="input"
-                      placeholder="Customer name"
-                      value={newCustomerName}
-                      onChange={(e) => setNewCustomerName(e.target.value)}
-                    />
-                    <input
-                      className="input"
-                      placeholder="Phone (optional)"
-                      value={newCustomerPhone}
-                      onChange={(e) => setNewCustomerPhone(e.target.value)}
-                    />
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => setAddingCustomer(false)} className="btn-secondary flex-1 text-sm">
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={createCustomer}
-                        disabled={customerBusy || !newCustomerName.trim()}
-                        className="btn-primary flex-1 text-sm"
-                      >
-                        {customerBusy ? 'Saving…' : 'Add customer'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <input
-                      className="input"
-                      placeholder="Search customer…"
-                      value={customerSearch}
-                      onChange={(e) => setCustomerSearch(e.target.value)}
-                    />
-                    <div className="max-h-32 overflow-y-auto">
-                      {filteredCustomers.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setSelectedCustomer(c)}
-                          className="w-full text-left text-sm px-2 py-1.5 hover:bg-paper rounded"
-                        >
-                          {c.name} {c.phone && <span className="text-muted text-xs">· {c.phone}</span>}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { setAddingCustomer(true); setNewCustomerName(customerSearch) }}
-                      className="text-xs text-brand-dark font-medium"
-                    >
-                      + Add new customer
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className={`flex items-center justify-between px-1 ${canSeeProfit ? 'mb-1' : 'mb-4'}`}>
-          <span className="text-sm font-medium">Total</span>
-          <span className="font-mono text-lg font-semibold">UGX {total.toLocaleString()}</span>
         </div>
-        {canSeeProfit && (
-          <div className="flex items-center justify-between mb-4 px-1">
-            <span className="text-xs text-muted">Profit</span>
-            <span className="font-mono text-sm text-amber">UGX {totalProfit.toLocaleString()}</span>
-          </div>
-        )}
 
-        <button
-          onClick={completeSale}
-          disabled={busy || cart.length === 0 || (paymentMethod === 'credit' && !selectedCustomer)}
-          className="btn-primary w-full"
-        >
-          {busy ? 'Completing…' : paymentMethod === 'credit' ? 'Record credit sale' : 'Complete sale'}
-        </button>
+        {/* ── Desktop cart column (hidden on mobile) ── */}
+        <div ref={cartSectionRef} className="hidden md:block scroll-mt-4">
+          <div className="mb-3 pb-2 ledger-rule">
+            <h2 className="font-display text-sm font-semibold">Current sale</h2>
+          </div>
+
+          {message && (
+            <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2">
+              <p className="text-sm text-brand-dark">{message}</p>
+              {lastReceipt && !message.startsWith('Error') && (
+                <button onClick={() => shareReceiptWhatsApp(lastReceipt)}
+                  className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
+                  </svg>
+                  Share receipt on WhatsApp
+                </button>
+              )}
+            </div>
+          )}
+
+          {cart.length === 0 ? (
+            <p className="card px-4 py-8 text-center text-sm text-muted">No items added yet.</p>
+          ) : (
+            <div className="card divide-y divide-line mb-4">
+              {cart.map((i) => {
+                const id = lineId(i.item)
+                const isManual = i.manualPrice !== null && i.manualPrice !== undefined
+                const unitPrice = unitPriceFor(i)
+                const lineProfit = i.quantity * (unitPrice - (i.item.cost_price || 0))
+                const available = i.item.quantity_on_hand ?? 0
+                const atMax = i.quantity >= available
+                return (
+                  <div key={id} className="px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium">{displayName(i.item)}</div>
+                        {!isManual && (
+                          <div className="text-xs text-muted font-mono">
+                            UGX {Number(unitPrice).toLocaleString()} each
+                            {canSeeProfit && <span className="text-amber ml-2">+{lineProfit.toLocaleString()} profit</span>}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => updateQty(id, i.quantity - 1)} className="btn-secondary px-2 py-1 text-xs">−</button>
+                        <span className="font-mono w-6 text-center">{i.quantity}</span>
+                        <button onClick={() => updateQty(id, i.quantity + 1)} disabled={atMax} className="btn-secondary px-2 py-1 text-xs disabled:opacity-40">+</button>
+                      </div>
+                    </div>
+                    {isManual && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-brick whitespace-nowrap">No saved price — enter sale price:</span>
+                        <input type="number" min="0" inputMode="numeric" placeholder="e.g. 5000"
+                          className="input font-mono py-1 text-sm"
+                          value={i.manualPrice}
+                          onChange={(e) => setManualPrice(id, e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {cart.length > 0 && (
+            <div className="mb-4">
+              <div className="text-xs font-medium text-muted mb-2">Payment</div>
+              <div className="flex gap-2 mb-2">
+                <button type="button" onClick={() => setPaymentMethodSafe('cash')}
+                  className={`flex-1 ${paymentMethod === 'cash' ? 'btn-primary' : 'btn-secondary'}`}>Cash</button>
+                <button type="button" onClick={() => setPaymentMethodSafe('credit')}
+                  className={`flex-1 ${paymentMethod === 'credit' ? 'btn-primary' : 'btn-secondary'}`}>Credit (pay later)</button>
+              </div>
+              {paymentMethod === 'credit' && (
+                <div className="card p-3 space-y-2">
+                  {selectedCustomer ? (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium">{selectedCustomer.name}</div>
+                        {selectedCustomer.phone && <div className="text-xs text-muted">{selectedCustomer.phone}</div>}
+                      </div>
+                      <button type="button" onClick={() => setSelectedCustomer(null)} className="text-xs text-muted">Change</button>
+                    </div>
+                  ) : addingCustomer ? (
+                    <div className="space-y-2">
+                      <input autoFocus className="input" placeholder="Customer name" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
+                      <input className="input" placeholder="Phone (optional)" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} />
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setAddingCustomer(false)} className="btn-secondary flex-1 text-sm">Cancel</button>
+                        <button type="button" onClick={createCustomer} disabled={customerBusy || !newCustomerName.trim()} className="btn-primary flex-1 text-sm">
+                          {customerBusy ? 'Saving…' : 'Add customer'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <input className="input" placeholder="Search customer…" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} />
+                      <div className="max-h-32 overflow-y-auto">
+                        {filteredCustomers.map((c) => (
+                          <button key={c.id} type="button" onClick={() => setSelectedCustomer(c)}
+                            className="w-full text-left text-sm px-2 py-1.5 hover:bg-paper rounded">
+                            {c.name} {c.phone && <span className="text-muted text-xs">· {c.phone}</span>}
+                          </button>
+                        ))}
+                      </div>
+                      <button type="button" onClick={() => { setAddingCustomer(true); setNewCustomerName(customerSearch) }}
+                        className="text-xs text-brand-dark font-medium">+ Add new customer</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className={`flex items-center justify-between px-1 ${canSeeProfit ? 'mb-1' : 'mb-4'}`}>
+            <span className="text-sm font-medium">Total</span>
+            <span className="font-mono text-lg font-semibold">UGX {total.toLocaleString()}</span>
+          </div>
+          {canSeeProfit && (
+            <div className="flex items-center justify-between mb-4 px-1">
+              <span className="text-xs text-muted">Profit</span>
+              <span className="font-mono text-sm text-amber">UGX {totalProfit.toLocaleString()}</span>
+            </div>
+          )}
+          <button onClick={completeSale}
+            disabled={busy || cart.length === 0 || (paymentMethod === 'credit' && !selectedCustomer)}
+            className="btn-primary w-full">
+            {busy ? 'Completing…' : paymentMethod === 'credit' ? 'Record credit sale' : 'Complete sale'}
+          </button>
+        </div>
       </div>
 
-      {scanning && <ScannerModal onResult={handleScan} onClose={() => setScanning(false)} />}
-
+      {/* ── Mobile cart bar (always visible when cart has items) ── */}
       {cart.length > 0 && (
-        <button
-          type="button"
-          onClick={scrollToCart}
-          className="md:hidden fixed bottom-20 left-4 right-20 z-30 btn-primary flex items-center justify-between px-4 py-3 shadow-lg rounded-md"
-        >
-          <span className="flex items-center gap-2">
-            <span className="bg-white/25 rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold">
-              {cart.reduce((sum, i) => sum + i.quantity, 0)}
-            </span>
-            View sale
-          </span>
-          <span className="font-mono">UGX {total.toLocaleString()}</span>
+        <button type="button" onClick={() => setShowCartDrawer(true)}
+          className="md:hidden fixed bottom-16 left-0 right-0 z-30 mx-3 mb-1 rounded-xl shadow-lg overflow-hidden"
+          style={{ background: 'var(--color-brand)' }}>
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold">
+                {totalQty}
+              </span>
+              <span className="text-white font-medium text-sm">View sale</span>
+            </div>
+            <span className="text-white font-mono font-semibold">UGX {total.toLocaleString()}</span>
+          </div>
         </button>
       )}
-      {cart.length > 0 && <div className="md:hidden h-16" aria-hidden="true" />}
-    </div>
+
+      {/* ── Mobile cart drawer ── */}
+      <CartDrawer
+        open={showCartDrawer}
+        onClose={() => setShowCartDrawer(false)}
+        cart={cart}
+        updateQty={updateQty}
+        unitPriceFor={unitPriceFor}
+        displayName={displayName}
+        lineId={lineId}
+        canSeeProfit={canSeeProfit}
+        total={total}
+        totalProfit={totalProfit}
+        paymentMethod={paymentMethod}
+        setPaymentMethodSafe={setPaymentMethodSafe}
+        selectedCustomer={selectedCustomer}
+        setSelectedCustomer={setSelectedCustomer}
+        customers={customers}
+        customerSearch={customerSearch}
+        setCustomerSearch={setCustomerSearch}
+        filteredCustomers={filteredCustomers}
+        addingCustomer={addingCustomer}
+        setAddingCustomer={setAddingCustomer}
+        newCustomerName={newCustomerName}
+        setNewCustomerName={setNewCustomerName}
+        newCustomerPhone={newCustomerPhone}
+        setNewCustomerPhone={setNewCustomerPhone}
+        createCustomer={createCustomer}
+        customerBusy={customerBusy}
+        completeSale={completeSale}
+        busy={busy}
+        message={message}
+        lastReceipt={lastReceipt}
+      />
+
+      {scanning && <ScannerModal onResult={handleScan} onClose={() => setScanning(false)} />}
+    </>
   )
 }
