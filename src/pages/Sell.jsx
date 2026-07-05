@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
@@ -322,6 +323,8 @@ function CartDrawer({
 // ── Main component ──────────────────────────────────────────────────────────
 export default function Sell() {
   const { business, activeStaff } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState([])
@@ -338,6 +341,8 @@ export default function Sell() {
   const [scanMessage, setScanMessage] = useState('')
   const [justAddedId, setJustAddedId] = useState(null)
   const cartSectionRef = useRef(null)
+  const submittingRef = useRef(false) // synchronous lock — closes the race where a fast double-tap
+  // fires before the `busy` state re-render lands
 
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [customers, setCustomers] = useState([])
@@ -358,6 +363,22 @@ export default function Sell() {
       loadCustomers()
     }
   }, [business])
+
+  // Picks up a barcode scanned from the global FAB on another page
+  // (Layout.jsx navigates here with `location.state.scannedBarcode`).
+  // Waits for `items` to be loaded so the lookup can actually succeed,
+  // then clears the router state so back/refresh/re-render can't
+  // re-add the same item a second time.
+  const lastHandledScanRef = useRef(null)
+  useEffect(() => {
+    const incoming = location.state?.scannedBarcode
+    const scannedAt = location.state?.scannedAt
+    if (!incoming || items.length === 0) return
+    if (lastHandledScanRef.current === scannedAt) return
+    lastHandledScanRef.current = scannedAt
+    handleScan(incoming)
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [location.state, items])
 
   useEffect(() => {
     setPendingCount(getQueue().length)
@@ -508,9 +529,11 @@ export default function Sell() {
 
   async function completeSale() {
     if (cart.length === 0) return
+    if (submittingRef.current) return // already mid-submit — ignore the double-tap
     const missingPrice = cart.find((i) => unitPriceFor(i) <= 0)
     if (missingPrice) { setMessage(`Error: enter a price for ${displayName(missingPrice.item)}.`); return }
     if (paymentMethod === 'credit' && !selectedCustomer) { setMessage('Error: pick or add a customer.'); return }
+    submittingRef.current = true
     setBusy(true)
 
     const saleData = {
@@ -564,7 +587,7 @@ export default function Sell() {
       setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
     }
 
-    if (!navigator.onLine) { onOffline(); setBusy(false); return }
+    if (!navigator.onLine) { onOffline(); setBusy(false); submittingRef.current = false; return }
 
     try {
       const { stockShortfalls } = await pushSaleToServer(business, saleData)
@@ -573,6 +596,7 @@ export default function Sell() {
       onOffline()
     } finally {
       setBusy(false)
+      submittingRef.current = false
     }
   }
 

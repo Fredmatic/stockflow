@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { canAccess } from '../lib/permissions'
@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabase'
 import { queueCount } from '../lib/offlineQueue'
 import Calculator from './Calculator'
 import ReminderPopup from './ReminderPopup'
+import { ScannerModal, ScanIcon } from './Scanner'
 
 const NAV_ITEMS = [
     { to: '/dashboard', label: 'Dashboard', icon: '◧' },
@@ -30,6 +31,21 @@ export default function Layout() {
     const { business, activeStaff, switchUser, signOut } = useAuth()
     const { theme, toggleTheme } = useTheme()
     const location = useLocation()
+    const navigate = useNavigate()
+    const [showGlobalScanner, setShowGlobalScanner] = useState(false)
+    const canSell = canAccess('/sell', activeStaff)
+
+    // Lets someone scan a barcode from *any* page — Dashboard, Products,
+    // wherever — and land straight in Sell with that item already added to
+    // the cart, instead of having to first navigate to Sell and use the
+    // scan button buried in its search bar. Sell.jsx picks up
+    // `scannedBarcode` from location.state on mount/update (see its
+    // useEffect) and clears it once handled so it doesn't re-fire.
+    function handleGlobalScan(code) {
+        setShowGlobalScanner(false)
+        navigate('/sell', { state: { scannedBarcode: code, scannedAt: Date.now() } })
+    }
+
     // Same bootstrap exception as App.jsx's <Restricted>: before anyone has
     // picked a staff member, /staff must still be reachable so the owner can
     // add the first team member at all.
@@ -282,6 +298,24 @@ export default function Layout() {
                     </div>
                 )}
             </div>
+
+            {canSell && location.pathname !== '/sell' && (
+                <button
+                    onClick={() => setShowGlobalScanner(true)}
+                    aria-label="Scan a product to sell"
+                    className="fab-above-nav fixed left-4 z-40 w-12 h-12 rounded-full bg-brand text-white shadow-lg flex items-center justify-center hover:bg-brand-dark"
+                >
+                    <ScanIcon />
+                </button>
+            )}
+
+            {showGlobalScanner && (
+                <ScannerModal
+                    onResult={handleGlobalScan}
+                    onClose={() => setShowGlobalScanner(false)}
+                    instructions="Scan a product's barcode to add it straight to a new sale."
+                />
+            )}
 
             <button
                 onClick={() => setShowCalculator(true)}
