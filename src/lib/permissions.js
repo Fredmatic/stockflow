@@ -25,4 +25,3 @@ export function canAccess(path, activeStaff) {
   if (!allowed) return true // unknown routes aren't restricted here
   return role ? allowed.includes(role) : false
 }
-
