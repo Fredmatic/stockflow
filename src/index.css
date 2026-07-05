@@ -24,18 +24,46 @@
     --color-muted: #5C6B65;
 }
 
-/* ── iPhone safe area background fill ── */
+/* ── iPhone safe area background fill ──
+   Scoped to .safe-top only (top-anchored bars: header, desktop sidebar
+   nav). Do NOT select bare `nav` — the mobile bottom tab bar is also a
+   <nav>, and applying top-inset padding to it made it silently grow
+   taller on iPhones, which let it cover the floating "View sale" cart
+   bar sitting just above it. */
 @supports (padding-top: env(safe-area-inset-top)) {
 
-    nav,
-    header,
-    .sticky {
+    .safe-top {
         padding-top: max(12px, env(safe-area-inset-top));
         background-clip: padding-box;
     }
 
     body {
         padding-top: 0;
+    }
+}
+
+/* Bottom tab bar: pad for the home-indicator gesture area instead,
+   and expose its real height as a variable so anything anchored above
+   it (e.g. the mobile cart bar) can position off the true value
+   instead of a guessed pixel offset. */
+:root {
+    --bottom-nav-height: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .safe-bottom-nav {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+.fab-above-nav {
+    bottom: calc(var(--bottom-nav-height) + 1rem);
+}
+
+@media (min-width: 768px) {
+    .fab-above-nav {
+        bottom: 1.5rem;
+        /* matches md:bottom-6, only reachable since Tailwind's md:bottom-6 utility can't win over a plain class of equal specificity otherwise */
     }
 }
 

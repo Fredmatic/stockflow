@@ -791,8 +791,8 @@ export default function Sell() {
       {/* ── Mobile cart bar (always visible when cart has items) ── */}
       {cart.length > 0 && (
         <button type="button" onClick={() => setShowCartDrawer(true)}
-          className="md:hidden fixed bottom-16 left-0 right-0 z-30 mx-3 mb-1 rounded-xl shadow-lg overflow-hidden"
-          style={{ background: 'var(--color-brand)' }}>
+          className="md:hidden fixed left-0 right-0 z-50 mx-3 mb-1 rounded-xl shadow-lg overflow-hidden"
+          style={{ background: 'var(--color-brand)', bottom: 'var(--bottom-nav-height)' }}>
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-3">
               <span className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold">
