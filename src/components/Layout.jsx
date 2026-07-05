@@ -10,6 +10,7 @@ import TrialBanner from './TrialBanner'
 import { supabase } from '../lib/supabase'
 import { queueCount } from '../lib/offlineQueue'
 import Calculator from './Calculator'
+import ReminderPopup from './ReminderPopup'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: '◧' },
@@ -293,6 +294,7 @@ export default function Layout() {
       {showCalculator && <Calculator onClose={() => setShowCalculator(false)} />}
 
       <BirthdayPopup name={activeStaff?.name} />
+      <ReminderPopup businessId={business?.id} />
 
       {showTutorial && (
         <TutorialPopup
