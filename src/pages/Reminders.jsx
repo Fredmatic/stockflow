@@ -2,7 +2,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { usePushNotifications } from '../hook/usePushNotifications'
 
 const FREQUENCIES = [
     { value: 'daily', label: 'Every day' },
@@ -23,7 +22,7 @@ const emptyForm = { id: null, label: '', amount: '', frequency: 'monthly', due_d
 
 export default function Reminders() {
     const { business } = useAuth()
-    const push = usePushNotifications(business?.id)
+
 
     const [reminders, setReminders] = useState([])
     const [loading, setLoading] = useState(true)
@@ -41,7 +40,7 @@ export default function Reminders() {
             .eq('business_id', business.id)
             .order('created_at', { ascending: false })
         if (error) setError(error.message)
-        else setReminders(data)
+        else setReminders(data || [])
         setLoading(false)
     }, [business?.id])
 
@@ -135,36 +134,6 @@ export default function Reminders() {
                     </p>
                 </div>
             </div>
-
-            {/* Push notification permission state */}
-            {push.supported && !push.subscribed && (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 flex items-start justify-between gap-4">
-                    <div>
-                        <p className="text-sm font-medium">Turn on reminder popups for this device</p>
-                        <p className="text-sm text-muted mt-0.5">
-                            You'll get a notification at 6:00 PM on days a payment is due, even with the app closed.
-                        </p>
-                    </div>
-                    <button onClick={push.subscribe} disabled={push.loading} className="btn-primary shrink-0">
-                        {push.loading ? 'Turning on…' : 'Turn on'}
-                    </button>
-                </div>
-            )}
-            {push.subscribed && (
-                <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 flex items-center justify-between gap-4">
-                    <p className="text-sm">Reminder popups are on for this device.</p>
-                    <button onClick={push.unsubscribe} className="text-sm text-muted underline">
-                        Turn off
-                    </button>
-                </div>
-            )}
-            {!push.supported && (
-                <div className="rounded-lg border p-3 text-sm text-muted">
-                    This browser doesn't support popup notifications. On iPhone, add StockTracer to your Home Screen first
-                    (Share → Add to Home Screen), then open it from there to turn reminders on.
-                </div>
-            )}
-            {push.error && <p className="text-sm text-red-600">{push.error}</p>}
 
             {/* Quick add for the common three */}
             {!showForm && (
