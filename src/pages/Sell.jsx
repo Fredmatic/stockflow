@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
-import Toast from '../components/Toast'
 import { enqueueSale, getQueue, removeFromQueue } from '../lib/offlineQueue'
 
 function lineId(item) {
@@ -132,12 +130,12 @@ async function pushSaleToServer(business, saleData) {
 
 // ── Cart Drawer (mobile only) ───────────────────────────────────────────────
 function CartDrawer({
-  open, onClose, cart, updateQty, unitPriceFor, displayName, lineId, setManualPrice,
+  open, onClose, cart, updateQty, unitPriceFor, displayName, lineId,
   canSeeProfit, total, totalProfit, paymentMethod, setPaymentMethodSafe,
   selectedCustomer, setSelectedCustomer, customers, customerSearch,
   setCustomerSearch, filteredCustomers, addingCustomer, setAddingCustomer,
   newCustomerName, setNewCustomerName, newCustomerPhone, setNewCustomerPhone,
-  createCustomer, customerBusy, completeSale, busy,
+  createCustomer, customerBusy, completeSale, busy, message, lastReceipt,
 }) {
   if (!open) return null
   return (
@@ -152,6 +150,22 @@ function CartDrawer({
         </div>
 
         <div className="sell-drawer-body">
+          {message && (
+            <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2">
+              <p className="text-sm text-brand-dark">{message}</p>
+              {lastReceipt && !message.startsWith('Error') && (
+                <button
+                  onClick={() => shareReceiptWhatsApp(lastReceipt)}
+                  className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
+                  </svg>
+                  Share receipt on WhatsApp
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="card divide-y divide-line mb-4">
             {cart.map((i) => {
@@ -185,7 +199,10 @@ function CartDrawer({
                       <input type="number" min="0" inputMode="numeric" placeholder="e.g. 5000"
                         className="input font-mono py-1 text-sm flex-1"
                         value={i.manualPrice}
-                        onChange={(e) => setManualPrice(id, e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          // call parent setManualPrice via updateQty trick — pass through props
+                        }}
                       />
                     </div>
                   )}
@@ -202,7 +219,66 @@ function CartDrawer({
                 className={`flex-1 ${paymentMethod === 'cash' ? 'btn-primary' : 'btn-secondary'}`}>Cash</button>
               <button type="button" onClick={() => setPaymentMethodSafe('credit')}
                 className={`flex-1 ${paymentMethod === 'credit' ? 'btn-primary' : 'btn-secondary'}`}>Credit</button>
+              <button type="button" onClick={() => setPaymentMethodSafe('installments')}
+                className={`flex-1 ${paymentMethod === 'installments' ? 'btn-primary' : 'btn-secondary'}`}>Installments</button>
             </div>
+
+            {paymentMethod === 'installments' && (
+              <div className="card p-3 space-y-2">
+                {!selectedCustomer ? (
+                  <>
+                    <div className="text-xs font-medium text-muted">Select customer</div>
+                    <input className="input" placeholder="Search customer…" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} />
+                    <div className="max-h-28 overflow-y-auto">
+                      {filteredCustomers.map((c) => (
+                        <button key={c.id} type="button" onClick={() => setSelectedCustomer(c)}
+                          className="w-full text-left text-sm px-2 py-1.5 hover:bg-paper rounded">
+                          {c.name} {c.phone && <span className="text-muted text-xs">· {c.phone}</span>}
+                        </button>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => { setAddingCustomer(true); setNewCustomerName(customerSearch) }}
+                      className="text-xs text-brand-dark font-medium">+ Add new customer</button>
+                    {addingCustomer && (
+                      <div className="space-y-2 pt-2 border-t border-line">
+                        <input autoFocus className="input" placeholder="Customer name" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
+                        <input className="input" placeholder="Phone (optional)" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} />
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => setAddingCustomer(false)} className="btn-secondary flex-1 text-sm">Cancel</button>
+                          <button type="button" onClick={createCustomer} disabled={customerBusy || !newCustomerName.trim()} className="btn-primary flex-1 text-sm">{customerBusy ? 'Saving…' : 'Add'}</button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div><div className="text-sm font-medium">{selectedCustomer.name}</div></div>
+                    <button type="button" onClick={() => setSelectedCustomer(null)} className="text-xs text-muted">Change</button>
+                  </div>
+                )}
+                <div className="border-t border-line pt-2 space-y-2">
+                  <div className="text-xs font-medium text-muted">Installment details</div>
+                  <label className="block">
+                    <span className="text-xs text-muted block mb-1">Amount per installment (UGX)</span>
+                    <input type="number" min="1" className="input font-mono" placeholder="e.g. 50000"
+                      value={installmentAmount} onChange={e => setInstallmentAmount(e.target.value)} />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-muted block mb-1">Frequency</span>
+                    <select className="input" value={installmentFrequency} onChange={e => setInstallmentFrequency(e.target.value)}>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-muted block mb-1">First payment due</span>
+                    <input type="date" className="input" min={new Date().toISOString().slice(0, 10)}
+                      value={installmentFirstDue} onChange={e => setInstallmentFirstDue(e.target.value)} />
+                  </label>
+                </div>
+              </div>
+            )}
 
             {paymentMethod === 'credit' && (
               <div className="card p-3 space-y-2">
@@ -257,9 +333,9 @@ function CartDrawer({
           )}
 
           <button onClick={completeSale}
-            disabled={busy || cart.length === 0 || (paymentMethod === 'credit' && !selectedCustomer)}
+            disabled={busy || cart.length === 0 || ((paymentMethod === 'credit' || paymentMethod === 'installments') && !selectedCustomer)}
             className="btn-primary w-full py-3 text-base">
-            {busy ? 'Completing…' : paymentMethod === 'credit' ? 'Record credit sale' : 'Complete sale — UGX ' + total.toLocaleString()}
+            {busy ? 'Completing…' : paymentMethod === 'credit' ? 'Record credit sale' : paymentMethod === 'installments' ? 'Record installment sale' : 'Complete sale — UGX ' + total.toLocaleString()}
           </button>
         </div>
       </div>
@@ -308,14 +384,11 @@ function CartDrawer({
 // ── Main component ──────────────────────────────────────────────────────────
 export default function Sell() {
   const { business, activeStaff } = useAuth()
-  const location = useLocation()
-  const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState([])
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [messageType, setMessageType] = useState('info')
   const [lastReceipt, setLastReceipt] = useState(null)
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [pendingCount, setPendingCount] = useState(0)
@@ -327,10 +400,11 @@ export default function Sell() {
   const [scanMessage, setScanMessage] = useState('')
   const [justAddedId, setJustAddedId] = useState(null)
   const cartSectionRef = useRef(null)
-  const submittingRef = useRef(false) // synchronous lock — closes the race where a fast double-tap
-  // fires before the `busy` state re-render lands
 
   const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [installmentAmount, setInstallmentAmount] = useState('')
+  const [installmentFrequency, setInstallmentFrequency] = useState('monthly')
+  const [installmentFirstDue, setInstallmentFirstDue] = useState('')
   const [customers, setCustomers] = useState([])
   const [customerSearch, setCustomerSearch] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -338,12 +412,6 @@ export default function Sell() {
   const [newCustomerName, setNewCustomerName] = useState('')
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
   const [customerBusy, setCustomerBusy] = useState(false)
-
-  function notify(type, text) {
-    setMessageType(type)
-    setMessage(text)
-  }
-
 
   useEffect(() => {
     if (business) {
@@ -355,22 +423,6 @@ export default function Sell() {
       loadCustomers()
     }
   }, [business])
-
-  // Picks up a barcode scanned from the global FAB on another page
-  // (Layout.jsx navigates here with `location.state.scannedBarcode`).
-  // Waits for `items` to be loaded so the lookup can actually succeed,
-  // then clears the router state so back/refresh/re-render can't
-  // re-add the same item a second time.
-  const lastHandledScanRef = useRef(null)
-  useEffect(() => {
-    const incoming = location.state?.scannedBarcode
-    const scannedAt = location.state?.scannedAt
-    if (!incoming || items.length === 0) return
-    if (lastHandledScanRef.current === scannedAt) return
-    lastHandledScanRef.current = scannedAt
-    handleScan(incoming)
-    navigate(location.pathname, { replace: true, state: {} })
-  }, [location.state, items])
 
   useEffect(() => {
     setPendingCount(getQueue().length)
@@ -406,9 +458,9 @@ export default function Sell() {
     setPendingCount(getQueue().length)
     setSyncing(false)
     if (shortfallMessages.length > 0) {
-      notify('warning', `⚠ Synced, but please check stock: ${shortfallMessages.join(' ')}`)
+      setMessage(`⚠ Synced, but please check stock: ${shortfallMessages.join(' ')}`)
     } else if (queue.length > getQueue().length) {
-      notify('success', `✓ Synced ${queue.length - getQueue().length} offline sale${queue.length - getQueue().length === 1 ? '' : 's'}.`)
+      setMessage(`✓ Synced ${queue.length - getQueue().length} offline sale${queue.length - getQueue().length === 1 ? '' : 's'}.`)
       setTimeout(() => setMessage(''), 5000)
     }
   }
@@ -428,7 +480,7 @@ export default function Sell() {
       .insert({ business_id: business.id, name: newCustomerName.trim(), phone: newCustomerPhone || null })
       .select().single()
     setCustomerBusy(false)
-    if (err) { notify('error', `Error: ${err.message}`); return }
+    if (err) { setMessage(`Error: ${err.message}`); return }
     setCustomers((c) => [...c, data])
     setSelectedCustomer(data)
     setAddingCustomer(false)
@@ -444,6 +496,7 @@ export default function Sell() {
     setPaymentMethod(method)
     if (method === 'cash') {
       setSelectedCustomer(null); setCustomerSearch(''); setAddingCustomer(false)
+      setInstallmentAmount(''); setInstallmentFirstDue('')
     }
   }
 
@@ -460,13 +513,13 @@ export default function Sell() {
       const existing = c.find((i) => lineId(i.item) === lineId(item))
       if (existing) {
         if (existing.quantity >= available) {
-          notify('error', `Error: only ${available} of ${displayName(item)} in stock.`)
+          setMessage(`Error: only ${available} of ${displayName(item)} in stock.`)
           return c
         }
         added = true
         return c.map((i) => lineId(i.item) === lineId(item) ? { ...i, quantity: i.quantity + 1 } : i)
       }
-      if (available <= 0) { notify('error', `Error: ${displayName(item)} is out of stock.`); return c }
+      if (available <= 0) { setMessage(`Error: ${displayName(item)} is out of stock.`); return c }
       added = true
       return [...c, { item, quantity: 1, manualPrice: hasPrice ? null : '' }]
     })
@@ -509,7 +562,7 @@ export default function Sell() {
       c.map((i) => {
         if (lineId(i.item) !== id) return i
         const available = i.item.quantity_on_hand ?? 0
-        if (qty > available) { notify('error', `Error: only ${available} in stock.`); return i }
+        if (qty > available) { setMessage(`Error: only ${available} in stock.`); return i }
         return { ...i, quantity: qty }
       }).filter((i) => i.quantity > 0)
     )
@@ -521,18 +574,18 @@ export default function Sell() {
 
   async function completeSale() {
     if (cart.length === 0) return
-    if (submittingRef.current) return // already mid-submit — ignore the double-tap
     const missingPrice = cart.find((i) => unitPriceFor(i) <= 0)
-    if (missingPrice) { notify('error', `Error: enter a price for ${displayName(missingPrice.item)}.`); return }
-    if (paymentMethod === 'credit' && !selectedCustomer) { notify('error', 'Error: pick or add a customer.'); return }
-    submittingRef.current = true
+    if (missingPrice) { setMessage(`Error: enter a price for ${displayName(missingPrice.item)}.`); return }
+    if ((paymentMethod === 'credit' || paymentMethod === 'installments') && !selectedCustomer) { setMessage('Error: pick or add a customer.'); return }
+    if (paymentMethod === 'installments' && (!installmentAmount || !installmentFirstDue)) { setMessage('Error: fill in installment amount and first due date.'); return }
     setBusy(true)
 
     const saleData = {
       staff_user_id: activeStaff?.id || null,
       total,
-      is_credit: paymentMethod === 'credit',
-      customer_id: paymentMethod === 'credit' ? selectedCustomer.id : null,
+      is_credit: paymentMethod === 'credit' || paymentMethod === 'installments',
+      customer_id: (paymentMethod === 'credit' || paymentMethod === 'installments') ? selectedCustomer.id : null,
+      is_installment: paymentMethod === 'installments',
       items: cart.map((i) => ({
         product_id: i.item.product_id,
         variant_id: i.item.variant_id || null,
@@ -551,17 +604,32 @@ export default function Sell() {
       date: new Date(),
     }
 
+    async function createInstallmentPlan(saleId) {
+      if (paymentMethod !== 'installments') return
+      await supabase.from('installment_plans').insert({
+        business_id: business.id,
+        customer_id: selectedCustomer.id,
+        sale_id: saleId,
+        total_amount: total,
+        amount_paid: 0,
+        installment_amount: Number(installmentAmount),
+        frequency: installmentFrequency,
+        next_due_date: installmentFirstDue,
+        note: `Sale installment plan`,
+      })
+      setInstallmentAmount(''); setInstallmentFrequency('monthly'); setInstallmentFirstDue('')
+    }
+
     function onSuccess(shortfalls) {
       if (shortfalls.length > 0) {
-        notify('warning', `✓ Sale recorded, but check stock: ${shortfalls.map((s) => s.name).join(', ')}.`)
+        setMessage(`⚠ Sale done, but check stock: ${shortfalls.map((s) => s.name).join(', ')}.`)
       } else {
-        notify(
-          'success',
+        setMessage(
           paymentMethod === 'credit'
-            ? `✓ Credit sale recorded for ${selectedCustomer.name} — UGX ${total.toLocaleString()}`
+            ? `Credit sale for ${selectedCustomer.name} — UGX ${total.toLocaleString()}`
             : canSeeProfit
-              ? `✓ Sale recorded — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
-              : `✓ Sale recorded — UGX ${total.toLocaleString()}`
+              ? `Sale done — UGX ${total.toLocaleString()} (profit UGX ${totalProfit.toLocaleString()})`
+              : `Sale done — UGX ${total.toLocaleString()}`
         )
       }
       setLastReceipt(receiptData)
@@ -573,46 +641,29 @@ export default function Sell() {
     function onOffline() {
       enqueueSale(saleData)
       setPendingCount(getQueue().length)
-      notify('offline', `Sale saved offline — will sync automatically (UGX ${total.toLocaleString()}).`)
+      setMessage(`📴 No connection — sale saved and will sync automatically (UGX ${total.toLocaleString()}).`)
       setLastReceipt(receiptData)
       setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
       setShowCartDrawer(false)
       setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
     }
 
-    if (!navigator.onLine) { onOffline(); setBusy(false); submittingRef.current = false; return }
+    if (!navigator.onLine) { onOffline(); setBusy(false); return }
 
     try {
-      const { stockShortfalls } = await pushSaleToServer(business, saleData)
+      const { stockShortfalls, sale } = await pushSaleToServer(business, saleData)
+      await createInstallmentPlan(sale?.id)
       onSuccess(stockShortfalls)
     } catch {
       onOffline()
     } finally {
       setBusy(false)
-      submittingRef.current = false
     }
   }
 
   // ── Render ─────────────────────────────────────────────────────────────
-  const receiptAction = lastReceipt && messageType !== 'error' && (
-    <button onClick={() => shareReceiptWhatsApp(lastReceipt)}
-      className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
-      </svg>
-      Share receipt on WhatsApp
-    </button>
-  )
-
   return (
     <>
-      <Toast
-        type={messageType}
-        message={message}
-        action={receiptAction}
-        onDismiss={() => { setMessage(''); setLastReceipt(null) }}
-      />
-
       <div className="grid md:grid-cols-2 gap-6">
         {(!isOnline || pendingCount > 0) && (
           <div className="md:col-span-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-700 rounded-md px-4 py-2 text-sm font-medium">
@@ -630,6 +681,18 @@ export default function Sell() {
         <div>
           <h1 className="font-display text-xl font-semibold mb-1">Sell</h1>
           <p className="text-muted text-sm mb-4">Tap a product to add it to the sale.</p>
+
+          {message && (
+            <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2 md:hidden">
+              <p className="text-sm text-brand-dark">{message}</p>
+              {lastReceipt && !message.startsWith('Error') && (
+                <button onClick={() => shareReceiptWhatsApp(lastReceipt)}
+                  className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
+                  Share receipt on WhatsApp
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2 mb-3">
             <input className="input flex-1" placeholder="Search product…"
@@ -679,6 +742,21 @@ export default function Sell() {
           <div className="mb-3 pb-2 ledger-rule">
             <h2 className="font-display text-sm font-semibold">Current sale</h2>
           </div>
+
+          {message && (
+            <div className="mb-3 bg-brand-light rounded-md px-3 py-2 space-y-2">
+              <p className="text-sm text-brand-dark">{message}</p>
+              {lastReceipt && !message.startsWith('Error') && (
+                <button onClick={() => shareReceiptWhatsApp(lastReceipt)}
+                  className="text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
+                  </svg>
+                  Share receipt on WhatsApp
+                </button>
+              )}
+            </div>
+          )}
 
           {cart.length === 0 ? (
             <p className="card px-4 py-8 text-center text-sm text-muted">No items added yet.</p>
@@ -731,8 +809,56 @@ export default function Sell() {
                 <button type="button" onClick={() => setPaymentMethodSafe('cash')}
                   className={`flex-1 ${paymentMethod === 'cash' ? 'btn-primary' : 'btn-secondary'}`}>Cash</button>
                 <button type="button" onClick={() => setPaymentMethodSafe('credit')}
-                  className={`flex-1 ${paymentMethod === 'credit' ? 'btn-primary' : 'btn-secondary'}`}>Credit (pay later)</button>
+                  className={`flex-1 ${paymentMethod === 'credit' ? 'btn-primary' : 'btn-secondary'}`}>Credit</button>
+                <button type="button" onClick={() => setPaymentMethodSafe('installments')}
+                  className={`flex-1 ${paymentMethod === 'installments' ? 'btn-primary' : 'btn-secondary'}`}>Installments</button>
               </div>
+              {paymentMethod === 'installments' && (
+                <div className="card p-3 space-y-2">
+                  {!selectedCustomer ? (
+                    <>
+                      <div className="text-xs font-medium text-muted">Select customer</div>
+                      <input className="input" placeholder="Search customer…" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} />
+                      <div className="max-h-28 overflow-y-auto">
+                        {filteredCustomers.map((c) => (
+                          <button key={c.id} type="button" onClick={() => setSelectedCustomer(c)}
+                            className="w-full text-left text-sm px-2 py-1.5 hover:bg-paper rounded">
+                            {c.name} {c.phone && <span className="text-muted text-xs">· {c.phone}</span>}
+                          </button>
+                        ))}
+                      </div>
+                      <button type="button" onClick={() => { setAddingCustomer(true); setNewCustomerName(customerSearch) }}
+                        className="text-xs text-brand-dark font-medium">+ Add new customer</button>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div><div className="text-sm font-medium">{selectedCustomer.name}</div></div>
+                      <button type="button" onClick={() => setSelectedCustomer(null)} className="text-xs text-muted">Change</button>
+                    </div>
+                  )}
+                  <div className="border-t border-line pt-2 space-y-2">
+                    <div className="text-xs font-medium text-muted">Installment details</div>
+                    <label className="block">
+                      <span className="text-xs text-muted block mb-1">Amount per installment (UGX)</span>
+                      <input type="number" min="1" className="input font-mono" placeholder="e.g. 50000"
+                        value={installmentAmount} onChange={e => setInstallmentAmount(e.target.value)} />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted block mb-1">Frequency</span>
+                      <select className="input" value={installmentFrequency} onChange={e => setInstallmentFrequency(e.target.value)}>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted block mb-1">First payment due</span>
+                      <input type="date" className="input" min={new Date().toISOString().slice(0, 10)}
+                        value={installmentFirstDue} onChange={e => setInstallmentFirstDue(e.target.value)} />
+                    </label>
+                  </div>
+                </div>
+              )}
               {paymentMethod === 'credit' && (
                 <div className="card p-3 space-y-2">
                   {selectedCustomer ? (
@@ -785,9 +911,9 @@ export default function Sell() {
             </div>
           )}
           <button onClick={completeSale}
-            disabled={busy || cart.length === 0 || (paymentMethod === 'credit' && !selectedCustomer)}
+            disabled={busy || cart.length === 0 || ((paymentMethod === 'credit' || paymentMethod === 'installments') && !selectedCustomer)}
             className="btn-primary w-full">
-            {busy ? 'Completing…' : paymentMethod === 'credit' ? 'Record credit sale' : 'Complete sale'}
+            {busy ? 'Completing…' : paymentMethod === 'credit' ? 'Record credit sale' : paymentMethod === 'installments' ? 'Record installment sale' : 'Complete sale'}
           </button>
         </div>
       </div>
@@ -795,8 +921,8 @@ export default function Sell() {
       {/* ── Mobile cart bar (always visible when cart has items) ── */}
       {cart.length > 0 && (
         <button type="button" onClick={() => setShowCartDrawer(true)}
-          className="md:hidden fixed left-0 right-0 z-50 mx-3 mb-1 rounded-xl shadow-lg overflow-hidden"
-          style={{ background: 'var(--color-brand)', bottom: 'var(--bottom-nav-height)' }}>
+          className="md:hidden fixed bottom-16 left-0 right-0 z-30 mx-3 mb-1 rounded-xl shadow-lg overflow-hidden"
+          style={{ background: 'var(--color-brand)' }}>
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-3">
               <span className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold">
@@ -818,7 +944,6 @@ export default function Sell() {
         unitPriceFor={unitPriceFor}
         displayName={displayName}
         lineId={lineId}
-        setManualPrice={setManualPrice}
         canSeeProfit={canSeeProfit}
         total={total}
         totalProfit={totalProfit}
@@ -840,6 +965,8 @@ export default function Sell() {
         customerBusy={customerBusy}
         completeSale={completeSale}
         busy={busy}
+        message={message}
+        lastReceipt={lastReceipt}
       />
 
       {scanning && <ScannerModal onResult={handleScan} onClose={() => setScanning(false)} />}

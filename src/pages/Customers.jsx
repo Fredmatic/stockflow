@@ -102,9 +102,9 @@ export default function Customers() {
         .from('customers')
         .select('id, payment_due_date, penalty_amount, penalty_note')
         .in('id', ids)
-      ;(cust || []).forEach((c) => {
-        deadlineMap[c.id] = c
-      })
+        ; (cust || []).forEach((c) => {
+          deadlineMap[c.id] = c
+        })
     }
 
     const merged = (data || []).map((c) => ({
@@ -283,8 +283,8 @@ function NewCustomerForm({ business, onClose, onSaved }) {
                   className="btn-secondary px-3 flex items-center gap-1 text-sm shrink-0"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                    <circle cx="12" cy="7" r="4"/>
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
                   </svg>
                   Contacts
                 </button>
@@ -330,6 +330,19 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
   const [penaltyNote, setPenaltyNote] = useState(customer.penalty_note || '')
   const [deadlineBusy, setDeadlineBusy] = useState(false)
 
+  // Installment plans
+  const [plans, setPlans] = useState([])
+  const [showNewPlan, setShowNewPlan] = useState(false)
+  const [planTotal, setPlanTotal] = useState('')
+  const [planInstallment, setPlanInstallment] = useState('')
+  const [planFrequency, setPlanFrequency] = useState('monthly')
+  const [planFirstDue, setPlanFirstDue] = useState('')
+  const [planNote, setPlanNote] = useState('')
+  const [planBusy, setPlanBusy] = useState(false)
+  const [payingPlanId, setPayingPlanId] = useState(null)
+  const [planPayAmount, setPlanPayAmount] = useState('')
+  const [planPayBusy, setPlanPayBusy] = useState(false)
+
   const canManageDeadline = activeStaff?.role === 'owner' || activeStaff?.role === 'manager'
   const deadlineStatus = getDeadlineStatus(dueDate)
 
@@ -337,18 +350,83 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
-      .from('debt_transactions')
-      .select('*')
-      .eq('customer_id', customer.customer_id)
-      .order('created_at', { ascending: false })
-    setTransactions(data || [])
-    const newBalance = (data || []).reduce(
+    const [{ data: txns }, { data: plansData }] = await Promise.all([
+      supabase.from('debt_transactions').select('*').eq('customer_id', customer.customer_id).order('created_at', { ascending: false }),
+      supabase.from('installment_plans').select('*').eq('customer_id', customer.customer_id).eq('is_complete', false).order('created_at', { ascending: false }),
+    ])
+    setTransactions(txns || [])
+    setPlans(plansData || [])
+    const newBalance = (txns || []).reduce(
       (sum, t) => sum + (t.type === 'credit_sale' ? Number(t.amount) : -Number(t.amount)),
       0
     )
     setBalance(newBalance)
     setLoading(false)
+  }
+
+  function nextDueDate(frequency, from) {
+    const d = new Date(from)
+    if (frequency === 'daily') d.setDate(d.getDate() + 1)
+    else if (frequency === 'weekly') d.setDate(d.getDate() + 7)
+    else d.setMonth(d.getMonth() + 1)
+    return d.toISOString().slice(0, 10)
+  }
+
+  async function createPlan(e) {
+    e.preventDefault()
+    if (!planTotal || !planInstallment || !planFirstDue) return
+    setPlanBusy(true)
+    try {
+      await supabase.from('installment_plans').insert({
+        business_id: business.id,
+        customer_id: customer.customer_id,
+        total_amount: Number(planTotal),
+        amount_paid: 0,
+        installment_amount: Number(planInstallment),
+        frequency: planFrequency,
+        next_due_date: planFirstDue,
+        note: planNote || null,
+      })
+      setPlanTotal(''); setPlanInstallment(''); setPlanFirstDue(''); setPlanNote('')
+      setShowNewPlan(false)
+      load()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setPlanBusy(false)
+    }
+  }
+
+  async function recordInstallment(plan) {
+    const amt = Number(planPayAmount)
+    if (!amt || amt <= 0) return
+    setPlanPayBusy(true)
+    try {
+      const newPaid = Number(plan.amount_paid) + amt
+      const remaining = Number(plan.total_amount) - newPaid
+      const isComplete = remaining <= 0
+      const newNextDue = isComplete ? plan.next_due_date : nextDueDate(plan.frequency, plan.next_due_date)
+      await Promise.all([
+        supabase.from('installment_payments').insert({
+          plan_id: plan.id, business_id: business.id,
+          customer_id: customer.customer_id, amount: amt,
+          staff_user_id: activeStaff?.id || null,
+        }),
+        supabase.from('installment_plans').update({
+          amount_paid: newPaid, next_due_date: newNextDue, is_complete: isComplete,
+        }).eq('id', plan.id),
+        supabase.from('debt_transactions').insert({
+          business_id: business.id, customer_id: customer.customer_id,
+          type: 'payment', amount: amt, note: `Installment payment (${plan.frequency})`,
+        }),
+      ])
+      setPlanPayAmount(''); setPayingPlanId(null)
+      load(); onChanged()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setPlanPayBusy(false)
+    }
   }
 
   async function recordPayment(e) {
@@ -487,7 +565,7 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
                   className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-white bg-[#25D366] rounded-md px-3 py-1.5"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/>
+                    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.92 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.2 8.2 0 0 1 5.83 2.42 8.2 8.2 0 0 1 2.41 5.83c0 4.55-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.76-1.85-.2-.48-.41-.42-.56-.42-.14 0-.31-.01-.47-.01a.9.9 0 0 0-.66.31c-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
                   </svg>
                   Send WhatsApp reminder
                 </button>
@@ -535,6 +613,130 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
                   </button>
                 </div>
               </form>
+            )}
+          </div>
+        )}
+
+        {/* Installment Plans */}
+        {(plans.length > 0 || canManageDeadline) && (
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-medium text-muted">Installment plans</div>
+              {canManageDeadline && (
+                <button type="button" onClick={() => setShowNewPlan(v => !v)}
+                  className="text-xs text-brand-dark font-medium">
+                  {showNewPlan ? 'Cancel' : '+ New plan'}
+                </button>
+              )}
+            </div>
+
+            {showNewPlan && (
+              <form onSubmit={createPlan} className="card p-3 space-y-2 mb-3">
+                <div className="text-xs font-semibold text-muted">New installment plan</div>
+                <label className="block">
+                  <span className="text-xs text-muted block mb-1">Total amount owed (UGX)</span>
+                  <input required type="number" min="1" className="input font-mono" placeholder="e.g. 300000"
+                    value={planTotal} onChange={e => setPlanTotal(e.target.value)} />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted block mb-1">Amount per installment (UGX)</span>
+                  <input required type="number" min="1" className="input font-mono" placeholder="e.g. 50000"
+                    value={planInstallment} onChange={e => setPlanInstallment(e.target.value)} />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted block mb-1">Frequency</span>
+                  <select className="input" value={planFrequency} onChange={e => setPlanFrequency(e.target.value)}>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted block mb-1">First payment due</span>
+                  <input required type="date" className="input"
+                    min={new Date().toISOString().slice(0, 10)}
+                    value={planFirstDue} onChange={e => setPlanFirstDue(e.target.value)} />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted block mb-1">Note (optional)</span>
+                  <input className="input" placeholder="e.g. TV installment"
+                    value={planNote} onChange={e => setPlanNote(e.target.value)} />
+                </label>
+                <button type="submit" disabled={planBusy} className="btn-primary w-full text-sm">
+                  {planBusy ? 'Saving…' : 'Create plan'}
+                </button>
+              </form>
+            )}
+
+            {plans.map(plan => {
+              const total = Number(plan.total_amount)
+              const paid = Number(plan.amount_paid)
+              const remaining = total - paid
+              const pct = Math.min(100, Math.round((paid / total) * 100))
+              const due = new Date(plan.next_due_date)
+              const today = new Date(); today.setHours(0, 0, 0, 0)
+              const isOverdue = due < today
+              const isDueToday = due.toDateString() === today.toDateString()
+              const isPaying = payingPlanId === plan.id
+              return (
+                <div key={plan.id} className="card p-3 mb-2">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="text-sm font-medium">
+                        {plan.note || `${plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1)} installments`}
+                      </div>
+                      <div className="text-xs text-muted">
+                        UGX {Number(plan.installment_amount).toLocaleString()} / {plan.frequency}
+                      </div>
+                    </div>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isOverdue ? 'bg-brick/10 text-brick' :
+                        isDueToday ? 'bg-amber-500/10 text-amber-700' :
+                          'bg-brand-light text-brand-dark'
+                      }`}>
+                      {isOverdue ? `⚠ Overdue` : isDueToday ? '⏰ Due today' : `Next: ${due.toLocaleDateString('en-UG', { day: 'numeric', month: 'short' })}`}
+                    </span>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="mb-2">
+                    <div className="flex justify-between text-xs text-muted mb-1">
+                      <span>Paid: UGX {paid.toLocaleString()}</span>
+                      <span>Left: UGX {remaining.toLocaleString()}</span>
+                    </div>
+                    <div className="h-2 bg-line rounded-full overflow-hidden">
+                      <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="text-xs text-muted mt-1">{pct}% paid of UGX {total.toLocaleString()}</div>
+                  </div>
+
+                  {canManageDeadline && (
+                    isPaying ? (
+                      <div className="flex gap-2 mt-2">
+                        <input type="number" min="1" className="input font-mono flex-1 text-sm py-1"
+                          placeholder={`e.g. ${Number(plan.installment_amount).toLocaleString()}`}
+                          value={planPayAmount} onChange={e => setPlanPayAmount(e.target.value)} autoFocus />
+                        <button type="button" onClick={() => recordInstallment(plan)}
+                          disabled={planPayBusy || !planPayAmount}
+                          className="btn-primary px-3 text-sm">
+                          {planPayBusy ? '…' : 'Record'}
+                        </button>
+                        <button type="button" onClick={() => { setPayingPlanId(null); setPlanPayAmount('') }}
+                          className="btn-secondary px-3 text-sm">✕</button>
+                      </div>
+                    ) : (
+                      <button type="button"
+                        onClick={() => { setPayingPlanId(plan.id); setPlanPayAmount(String(plan.installment_amount)) }}
+                        className="btn-primary w-full text-sm mt-1">
+                        Record installment payment
+                      </button>
+                    )
+                  )}
+                </div>
+              )
+            })}
+
+            {plans.length === 0 && !showNewPlan && (
+              <p className="text-xs text-muted italic">No active installment plans.</p>
             )}
           </div>
         )}
