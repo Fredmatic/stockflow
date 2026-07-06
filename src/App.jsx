@@ -39,7 +39,12 @@ function Gate({ children }) {
 
   // Protected area below — must be signed in
   if (!session) return <Navigate to="/" replace />
-  if (businessLoading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Setting up your business…</div>
+  if (businessLoading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Starting up your business…</div>
+  // New signup — redirect to staff page to add first team member
+  if (business && localStorage.getItem('stocktracer_new_account')) {
+    localStorage.removeItem('stocktracer_new_account')
+    return <Navigate to="/staff" replace />
+  }
   if (!business) return <NoBusinessScreen error={businessError} onSignOut={signOut} />
 
   // Trial / subscription check — expired businesses see the paywall

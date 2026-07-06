@@ -49,6 +49,7 @@ export default function Login() {
             type: businessType,
           })
           if (bizError) throw bizError
+          localStorage.setItem('stocktracer_new_account', '1')
         }
       }
     } catch (err) {
