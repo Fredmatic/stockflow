@@ -30,7 +30,6 @@ export default function Reminders() {
     const [error, setError] = useState(null)
     const [form, setForm] = useState(emptyForm)
     const [showForm, setShowForm] = useState(false)
-    const [showForm, setShowForm] = useState(false)
     const [testMode, setTestMode] = useState(false)
 
     const load = useCallback(async () => {
