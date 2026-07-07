@@ -200,13 +200,21 @@ export default function Sales() {
             key={r.key}
             onClick={() => setRange(r.key)}
             className={`px-3 py-1.5 rounded-md text-xs font-medium border ${range === r.key
-                ? 'bg-brand-light text-brand-dark border-brand-light'
-                : 'border-line text-muted hover:bg-paper'
+              ? 'bg-brand-light text-brand-dark border-brand-light'
+              : 'border-line text-muted hover:bg-paper'
               }`}
           >
             {r.label}
           </button>
         ))}
+        {canExport && sales.length > 0 && (
+          <button
+            onClick={() => exportToCSV(sales, business?.name)}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-line text-muted hover:bg-paper"
+          >
+            ⬇ Export CSV
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -382,17 +390,15 @@ function ProductBreakdown({ products }) {
       <div className="flex gap-2 mb-3">
         <button
           onClick={() => setView('best')}
-          className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
-            view === 'best' ? 'bg-brand-light text-brand-dark border-brand-light' : 'border-line text-muted hover:bg-paper'
-          }`}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium border ${view === 'best' ? 'bg-brand-light text-brand-dark border-brand-light' : 'border-line text-muted hover:bg-paper'
+            }`}
         >
           Best sellers
         </button>
         <button
           onClick={() => setView('worst')}
-          className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
-            view === 'worst' ? 'bg-brand-light text-brand-dark border-brand-light' : 'border-line text-muted hover:bg-paper'
-          }`}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium border ${view === 'worst' ? 'bg-brand-light text-brand-dark border-brand-light' : 'border-line text-muted hover:bg-paper'
+            }`}
         >
           Slowest movers
         </button>

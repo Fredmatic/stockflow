@@ -20,7 +20,7 @@ function todayKey() {
     return 'stocktracer_reminder_shown_' + new Date().toISOString().slice(0, 10)
 }
 
-export default function ReminderPopup({ businessId }) {
+export default function ReminderPopup({ businessId, forceShow = false }) {
     const [dueReminders, setDueReminders] = useState([])
     const [visible, setVisible] = useState(false)
     const shownRef = useRef(false)

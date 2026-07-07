@@ -123,7 +123,7 @@ export default function Reports() {
         expensesByCategory: [], revenuePoints: [], salesCountPoints: [],
     })
 
-    useEffect(() => { if (business) load() }, [business, period])
+    useEffect(() => { if (business) load() }, [business, period, customFrom, customTo])
 
     async function load() {
         setLoading(true)
@@ -220,6 +220,7 @@ export default function Reports() {
                         ))}
                     </div>
                     <button onClick={() => window.print()} className="btn-secondary no-print">🖨 Print</button>
+                    {!loading && <button onClick={() => exportReportCSV(data, period, business?.name)} className="btn-secondary no-print">⬇ Export CSV</button>}
                 </div>
             </div>
 
