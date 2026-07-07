@@ -10,28 +10,39 @@
 -- who did what.
 
 create table businesses (
-  id uuid primary key default gen_random_uuid(),
-  owner_auth_id uuid not null references auth.users(id) on delete cascade,
-  name text not null,
-  type text not null check (type in ('retail', 'electronics', 'supermarket')),
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    owner_auth_id uuid not null references auth.users (id) on delete cascade,
+    name text not null,
+    type text not null check (
+        type in (
+            'retail',
+            'electronics',
+            'supermarket'
+        )
+    ),
+    created_at timestamptz not null default now()
 );
 
 create table staff_users (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references businesses(id) on delete cascade,
-  name text not null,
-  role text not null check (role in ('owner', 'staff', 'cashier')),
-  pin text not null check (pin ~ '^[0-9]{4}$'),
-  created_at timestamptz not null default now(),
-  unique (business_id, pin)
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    name text not null,
+    role text not null check (
+        role in ('owner', 'staff', 'cashier')
+    ),
+    pin text not null check (
+        pin ~ '^[0-9]{4}$'
+        or pin ~ '^[0-9a-f]{64}$'
+    ),
+    created_at timestamptz not null default now(),
+    unique (business_id, pin)
 );
 
 create table categories (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references businesses(id) on delete cascade,
-  name text not null,
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    name text not null,
+    created_at timestamptz not null default now()
 );
 
 create table products (
@@ -57,86 +68,96 @@ create index on products (business_id);
 -- products.has_variants = true; the parent products row then just holds
 -- the shared name/category, and selling/stocking happens per variant.
 create table product_variants (
-  id uuid primary key default gen_random_uuid(),
-  product_id uuid not null references products(id) on delete cascade,
-  business_id uuid not null references businesses(id) on delete cascade,
-  name text not null,
-  sub_name text,
-  sku text,
-  barcode text,
-  cost_price numeric(12,2) not null default 0,
-  selling_price numeric(12,2) not null default 0,
-  reorder_level integer not null default 5,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    product_id uuid not null references products (id) on delete cascade,
+    business_id uuid not null references businesses (id) on delete cascade,
+    name text not null,
+    sub_name text,
+    sku text,
+    barcode text,
+    cost_price numeric(12, 2) not null default 0,
+    selling_price numeric(12, 2) not null default 0,
+    reorder_level integer not null default 5,
+    is_active boolean not null default true,
+    created_at timestamptz not null default now()
 );
 
 create index on product_variants (product_id);
+
 create index on product_variants (business_id);
 
 -- Every stock change is a row here. Current quantity = sum(quantity).
 -- quantity is signed: positive = stock added, negative = stock removed.
 create table stock_movements (
-  id uuid primary key default gen_random_uuid(),
-  product_id uuid not null references products(id) on delete cascade,
-  variant_id uuid references product_variants(id) on delete cascade,
-  business_id uuid not null references businesses(id) on delete cascade,
-  type text not null check (type in ('restock', 'sale', 'adjustment', 'damaged')),
-  quantity integer not null,
-  note text,
-  staff_user_id uuid references staff_users(id) on delete set null,
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    product_id uuid not null references products (id) on delete cascade,
+    variant_id uuid references product_variants (id) on delete cascade,
+    business_id uuid not null references businesses (id) on delete cascade,
+    type text not null check (
+        type in (
+            'restock',
+            'sale',
+            'adjustment',
+            'damaged'
+        )
+    ),
+    quantity integer not null,
+    note text,
+    staff_user_id uuid references staff_users (id) on delete set null,
+    created_at timestamptz not null default now()
 );
 
 create index on stock_movements (product_id);
+
 create index on stock_movements (variant_id);
+
 create index on stock_movements (business_id, created_at desc);
 
 -- A customer who can buy on credit (pay later) instead of paying in full
 -- at the till.
 create table customers (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references businesses(id) on delete cascade,
-  name text not null,
-  phone text,
-  note text,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    name text not null,
+    phone text,
+    note text,
+    is_active boolean not null default true,
+    created_at timestamptz not null default now()
 );
 
 create index on customers (business_id);
 
 create table sales (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references businesses(id) on delete cascade,
-  staff_user_id uuid references staff_users(id) on delete set null,
-  customer_id uuid references customers(id) on delete set null,
-  is_credit boolean not null default false,
-  total_amount numeric(12,2) not null default 0,
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    staff_user_id uuid references staff_users (id) on delete set null,
+    customer_id uuid references customers (id) on delete set null,
+    is_credit boolean not null default false,
+    total_amount numeric(12, 2) not null default 0,
+    created_at timestamptz not null default now()
 );
 
 create table sale_items (
-  id uuid primary key default gen_random_uuid(),
-  sale_id uuid not null references sales(id) on delete cascade,
-  product_id uuid not null references products(id) on delete restrict,
-  variant_id uuid references product_variants(id) on delete set null,
-  quantity integer not null,
-  unit_price numeric(12,2) not null,
-  unit_cost numeric(12,2) not null default 0
+    id uuid primary key default gen_random_uuid (),
+    sale_id uuid not null references sales (id) on delete cascade,
+    product_id uuid not null references products (id) on delete restrict,
+    variant_id uuid references product_variants (id) on delete set null,
+    quantity integer not null,
+    unit_price numeric(12, 2) not null,
+    unit_cost numeric(12, 2) not null default 0
 );
 
 -- Operating expenses (rent, transport, utilities, etc.) — tracked
 -- separately from cost-of-goods so "net profit" can be shown alongside
 -- the per-product gross margin already calculated from sale_items.
 create table expenses (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references businesses(id) on delete cascade,
-  staff_user_id uuid references staff_users(id) on delete set null,
-  category text not null,
-  amount numeric(12,2) not null,
-  note text,
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    staff_user_id uuid references staff_users (id) on delete set null,
+    category text not null,
+    amount numeric(12, 2) not null,
+    note text,
+    created_at timestamptz not null default now()
 );
 
 create index on expenses (business_id, created_at desc);
@@ -145,32 +166,35 @@ create index on expenses (business_id, created_at desc);
 -- (increases what they owe) or a payment (decreases it). Current balance
 -- = sum of credit_sale amounts minus sum of payment amounts.
 create table debt_transactions (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references businesses(id) on delete cascade,
-  customer_id uuid not null references customers(id) on delete cascade,
-  sale_id uuid references sales(id) on delete set null,
-  type text not null check (type in ('credit_sale', 'payment')),
-  amount numeric(12,2) not null check (amount > 0),
-  note text,
-  staff_user_id uuid references staff_users(id) on delete set null,
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    customer_id uuid not null references customers (id) on delete cascade,
+    sale_id uuid references sales (id) on delete set null,
+    type text not null check (
+        type in ('credit_sale', 'payment')
+    ),
+    amount numeric(12, 2) not null check (amount > 0),
+    note text,
+    staff_user_id uuid references staff_users (id) on delete set null,
+    created_at timestamptz not null default now()
 );
 
 create index on debt_transactions (customer_id, created_at desc);
+
 create index on debt_transactions (business_id);
 
 -- A lender who YOU owe money to (personal/business loans, advances, etc).
 -- Separate from `customers` (who owe the shop) and unrelated to stock
 -- suppliers. due_date is a self-reminder of when you intend to repay.
 create table lenders (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references businesses(id) on delete cascade,
-  name text not null,
-  phone text,
-  note text,
-  due_date date,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    name text not null,
+    phone text,
+    note text,
+    due_date date,
+    is_active boolean not null default true,
+    created_at timestamptz not null default now()
 );
 
 create index on lenders (business_id);
@@ -178,17 +202,20 @@ create index on lenders (business_id);
 -- Every change to what you owe a lender is one row here: 'borrowed'
 -- (increases what you owe) or 'repayment' (decreases it).
 create table lender_transactions (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references businesses(id) on delete cascade,
-  lender_id uuid not null references lenders(id) on delete cascade,
-  type text not null check (type in ('borrowed', 'repayment')),
-  amount numeric(12,2) not null check (amount > 0),
-  note text,
-  staff_user_id uuid references staff_users(id) on delete set null,
-  created_at timestamptz not null default now()
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    lender_id uuid not null references lenders (id) on delete cascade,
+    type text not null check (
+        type in ('borrowed', 'repayment')
+    ),
+    amount numeric(12, 2) not null check (amount > 0),
+    note text,
+    staff_user_id uuid references staff_users (id) on delete set null,
+    created_at timestamptz not null default now()
 );
 
 create index on lender_transactions (lender_id, created_at desc);
+
 create index on lender_transactions (business_id);
 
 -- ------------------------------------------------------------
@@ -196,6 +223,7 @@ create index on lender_transactions (business_id);
 -- A row is either a simple product, or one variant/type of a
 -- variant-parent product (has_variants = true).
 -- ------------------------------------------------------------
+
 create view product_stock as
 select
   p.id as product_id,
@@ -250,17 +278,32 @@ group by v.id, v.product_id, v.business_id, p.name, v.name, v.sku, v.barcode, v.
 -- ------------------------------------------------------------
 create view debtor_summary as
 select
-  c.id as customer_id,
-  c.business_id,
-  c.name,
-  c.phone,
-  c.note,
-  coalesce(sum(case when t.type = 'credit_sale' then t.amount else -t.amount end), 0) as balance,
-  max(t.created_at) as last_activity
-from customers c
-left join debt_transactions t on t.customer_id = c.id
-where c.is_active = true
-group by c.id, c.business_id, c.name, c.phone, c.note;
+    c.id as customer_id,
+    c.business_id,
+    c.name,
+    c.phone,
+    c.note,
+    coalesce(
+        sum(
+            case
+                when t.type = 'credit_sale' then t.amount
+                else - t.amount
+            end
+        ),
+        0
+    ) as balance,
+    max(t.created_at) as last_activity
+from
+    customers c
+    left join debt_transactions t on t.customer_id = c.id
+where
+    c.is_active = true
+group by
+    c.id,
+    c.business_id,
+    c.name,
+    c.phone,
+    c.note;
 
 -- ------------------------------------------------------------
 -- View: one row per lender with the current balance (how much you
@@ -268,18 +311,34 @@ group by c.id, c.business_id, c.name, c.phone, c.note;
 -- ------------------------------------------------------------
 create view lender_summary as
 select
-  l.id as lender_id,
-  l.business_id,
-  l.name,
-  l.phone,
-  l.note,
-  l.due_date,
-  coalesce(sum(case when t.type = 'borrowed' then t.amount else -t.amount end), 0) as balance,
-  max(t.created_at) as last_activity
-from lenders l
-left join lender_transactions t on t.lender_id = l.id
-where l.is_active = true
-group by l.id, l.business_id, l.name, l.phone, l.note, l.due_date;
+    l.id as lender_id,
+    l.business_id,
+    l.name,
+    l.phone,
+    l.note,
+    l.due_date,
+    coalesce(
+        sum(
+            case
+                when t.type = 'borrowed' then t.amount
+                else - t.amount
+            end
+        ),
+        0
+    ) as balance,
+    max(t.created_at) as last_activity
+from
+    lenders l
+    left join lender_transactions t on t.lender_id = l.id
+where
+    l.is_active = true
+group by
+    l.id,
+    l.business_id,
+    l.name,
+    l.phone,
+    l.note,
+    l.due_date;
 
 -- ------------------------------------------------------------
 -- Row Level Security — every table is locked to the owner's
@@ -287,58 +346,142 @@ group by l.id, l.business_id, l.name, l.phone, l.note, l.due_date;
 -- same logged-in session (the shared shop device).
 -- ------------------------------------------------------------
 alter table businesses enable row level security;
+
 alter table staff_users enable row level security;
+
 alter table categories enable row level security;
+
 alter table products enable row level security;
+
 alter table product_variants enable row level security;
+
 alter table stock_movements enable row level security;
+
 alter table customers enable row level security;
+
 alter table sales enable row level security;
+
 alter table sale_items enable row level security;
+
 alter table expenses enable row level security;
+
 alter table debt_transactions enable row level security;
+
 alter table lenders enable row level security;
+
 alter table lender_transactions enable row level security;
 
-create policy "owner_full_access" on businesses
-  for all using (owner_auth_id = auth.uid());
+create policy "owner_full_access" on businesses for all using (owner_auth_id = auth.uid ());
 
-create policy "owner_full_access" on staff_users
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
-
-create policy "owner_full_access" on categories
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
-
-create policy "owner_full_access" on products
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
-
-create policy "owner_full_access" on product_variants
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
-
-create policy "owner_full_access" on stock_movements
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
-
-create policy "owner_full_access" on sales
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
-
-create policy "owner_full_access" on sale_items
-  for all using (sale_id in (
-    select id from sales where business_id in (
-      select id from businesses where owner_auth_id = auth.uid()
+create policy "owner_full_access" on staff_users for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
     )
-  ));
+);
 
-create policy "owner_full_access" on expenses
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
+create policy "owner_full_access" on categories for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
 
-create policy "owner_full_access" on customers
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
+create policy "owner_full_access" on products for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
 
-create policy "owner_full_access" on debt_transactions
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
+create policy "owner_full_access" on product_variants for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
 
-create policy "owner_full_access" on lenders
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
+create policy "owner_full_access" on stock_movements for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
 
-create policy "owner_full_access" on lender_transactions
-  for all using (business_id in (select id from businesses where owner_auth_id = auth.uid()));
+create policy "owner_full_access" on sales for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
+
+create policy "owner_full_access" on sale_items for all using (
+    sale_id in (
+        select id
+        from sales
+        where
+            business_id in (
+                select id
+                from businesses
+                where
+                    owner_auth_id = auth.uid ()
+            )
+    )
+);
+
+create policy "owner_full_access" on expenses for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
+
+create policy "owner_full_access" on customers for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
+
+create policy "owner_full_access" on debt_transactions for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
+
+create policy "owner_full_access" on lenders for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
+
+create policy "owner_full_access" on lender_transactions for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
