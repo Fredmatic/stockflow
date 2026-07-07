@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import ReminderPopup from '../components/ReminderPopup'
 
 const FREQUENCIES = [
     { value: 'daily', label: 'Every day' },
