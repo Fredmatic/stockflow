@@ -2,6 +2,39 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+function exportToCSV(sales, businessName) {
+  const rows = [['Date', 'Time', 'Staff', 'Customer', 'Type', 'Items', 'Total (UGX)', 'Cost (UGX)', 'Profit (UGX)', 'Refunded']]
+  sales.forEach(sale => {
+    const date = new Date(sale.created_at)
+    const items = (sale.sale_items || []).map(i => {
+      const name = i.products?.name || 'Deleted'
+      const variant = i.product_variants?.name ? ` — ${i.product_variants.name}` : ''
+      return `${i.quantity}x ${name}${variant}`
+    }).join(' | ')
+    const total = (sale.sale_items || []).reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0)
+    const cost = (sale.sale_items || []).reduce((s, i) => s + Number(i.unit_cost) * Number(i.quantity), 0)
+    rows.push([
+      date.toLocaleDateString('en-UG'),
+      date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit' }),
+      sale.staff_users?.name || '—',
+      sale.customers?.name || '—',
+      sale.is_credit ? 'Credit' : 'Cash',
+      items,
+      total,
+      cost,
+      total - cost,
+      sale.is_refunded ? 'Yes' : 'No',
+    ])
+  })
+  const csv = rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${businessName || 'stocktracer'}-sales-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 
 const RANGES = [
   { key: 'today', label: 'Today' },
