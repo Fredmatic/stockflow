@@ -45,6 +45,7 @@ export default function Sales() {
 
   const canSeeNetProfit = activeStaff?.role === 'owner'
   const canRefund = activeStaff?.role === 'owner' || activeStaff?.role === 'manager'
+  const canExport = activeStaff?.role === 'owner'
 
   useEffect(() => {
     if (!business) return
