@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import ReminderPopup from '../components/ReminderPopup'
 
+
 const FREQUENCIES = [
     { value: 'daily', label: 'Every day' },
     { value: 'weekly', label: 'Every week' },
@@ -31,6 +32,7 @@ export default function Reminders() {
     const [error, setError] = useState(null)
     const [form, setForm] = useState(emptyForm)
     const [showForm, setShowForm] = useState(false)
+    const [testMode, setTestMode] = useState(false)
 
     const load = useCallback(async () => {
         if (!business?.id) return
