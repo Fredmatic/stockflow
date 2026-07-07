@@ -25,17 +25,23 @@ export default function ReminderPopup({ businessId, forceShow = false }) {
     const [visible, setVisible] = useState(false)
     const shownRef = useRef(false)
 
+    // When forceShow changes to true, reset shownRef so test works every click
+    useEffect(() => {
+        if (forceShow) shownRef.current = false
+    }, [forceShow])
+
     useEffect(() => {
         if (!businessId) return
 
         async function check() {
-            // Only show once per day
-            if (localStorage.getItem(todayKey())) return
+            // In test mode: bypass time and daily-once checks
+            if (!forceShow) {
+                if (localStorage.getItem(todayKey())) return
+                if (shownRef.current) return
+                const now = new Date()
+                if (now.getHours() !== 18) return
+            }
             if (shownRef.current) return
-
-            const now = new Date()
-            // Fire between 18:00 and 18:01 (checks every 30s so catches the window)
-            if (now.getHours() !== 18) return
 
             const { data } = await supabase
                 .from('recurring_reminders')
@@ -43,23 +49,22 @@ export default function ReminderPopup({ businessId, forceShow = false }) {
                 .eq('business_id', businessId)
                 .eq('is_active', true)
 
-            const due = (data || []).filter(isDueToday)
+            const due = forceShow ? (data || []) : (data || []).filter(isDueToday)
             if (due.length === 0) {
-                // Mark shown even if nothing due, so we don't keep checking
-                localStorage.setItem(todayKey(), '1')
+                if (!forceShow) localStorage.setItem(todayKey(), '1')
                 return
             }
 
             shownRef.current = true
-            localStorage.setItem(todayKey(), '1')
+            if (!forceShow) localStorage.setItem(todayKey(), '1')
             setDueReminders(due)
             setVisible(true)
         }
 
         check()
-        const interval = setInterval(check, 30_000)
-        return () => clearInterval(interval)
-    }, [businessId])
+        const interval = forceShow ? null : setInterval(check, 30_000)
+        return () => { if (interval) clearInterval(interval) }
+    }, [businessId, forceShow])
 
     if (!visible || dueReminders.length === 0) return null
 
