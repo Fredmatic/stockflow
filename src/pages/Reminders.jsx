@@ -31,7 +31,6 @@ export default function Reminders() {
     const [error, setError] = useState(null)
     const [form, setForm] = useState(emptyForm)
     const [showForm, setShowForm] = useState(false)
-    const [testMode, setTestMode] = useState(false)
 
     const load = useCallback(async () => {
         if (!business?.id) return
@@ -136,7 +135,7 @@ export default function Reminders() {
                             A popup notification arrives at 6:00 PM on any day a reminder is due — even if the app is closed.
                         </p>
                         <button
-                            onClick={() => { setTestMode(true); setTimeout(() => setTestMode(false), 500) }}
+                            onClick={() => setTestMode(true)}
                             className="mt-2 text-xs text-brand-dark font-medium border border-brand-light bg-brand-light px-3 py-1.5 rounded-md hover:bg-brand/10 transition-colors"
                         >
                             🔔 Test popup now
@@ -308,7 +307,7 @@ export default function Reminders() {
                     </ul>
                 )}
             </div>
-            {testMode && <ReminderPopup businessId={business?.id} forceShow={true} />}
+            {testMode && <ReminderPopup businessId={business?.id} forceShow={true} onClose={() => setTestMode(false)} />}
         </>
     )
 }

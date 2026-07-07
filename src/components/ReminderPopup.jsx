@@ -20,7 +20,7 @@ function todayKey() {
     return 'stocktracer_reminder_shown_' + new Date().toISOString().slice(0, 10)
 }
 
-export default function ReminderPopup({ businessId, forceShow = false }) {
+export default function ReminderPopup({ businessId, forceShow = false, onClose }) {
     const [dueReminders, setDueReminders] = useState([])
     const [visible, setVisible] = useState(false)
     const shownRef = useRef(false)
@@ -99,7 +99,7 @@ export default function ReminderPopup({ businessId, forceShow = false }) {
                     </div>
                 )}
 
-                <button className="reminder-dismiss" onClick={() => setVisible(false)}>
+                <button className="reminder-dismiss" onClick={() => { setVisible(false); onClose?.() }}>
                     Got it
                 </button>
             </div>
