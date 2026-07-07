@@ -113,6 +113,8 @@ function HorizontalBarChart({ items }) {
 export default function Reports() {
     const { business, activeStaff } = useAuth()
     const [period, setPeriod] = useState('month')
+    const [customFrom, setCustomFrom] = useState('')
+    const [customTo, setCustomTo] = useState('')
     const [loading, setLoading] = useState(true)
     const printRef = useRef(null)
 
