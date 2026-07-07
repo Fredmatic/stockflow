@@ -41,20 +41,14 @@ export default function Staff() {
     }
     setBusy(true)
     try {
-      // Insert first to get the ID, then hash with that ID as salt
-      const { data: newStaff, error: insertErr } = await supabase
+      // Generate the id on the device so we can hash the PIN with it as
+      // salt before the row is ever written — no placeholder pin needed.
+      const id = crypto.randomUUID()
+      const hashed = await hashPin(pin, id)
+      const { error: insertErr } = await supabase
         .from('staff_users')
-        .insert({ business_id: business.id, name, role, pin: 'pending' })
-        .select()
-        .single()
+        .insert({ id, business_id: business.id, name, role, pin: hashed })
       if (insertErr) throw insertErr
-
-      const hashed = await hashPin(pin, newStaff.id)
-      const { error: updateErr } = await supabase
-        .from('staff_users')
-        .update({ pin: hashed })
-        .eq('id', newStaff.id)
-      if (updateErr) throw updateErr
 
       setName(''); setPin('')
       load()
