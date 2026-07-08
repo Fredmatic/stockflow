@@ -269,7 +269,7 @@ function NewCustomerForm({ business, onClose, onSaved }) {
         <form onSubmit={handleSubmit} className="space-y-3">
           <label className="block">
             <span className="text-xs font-medium text-muted mb-1 block">Name</span>
-            <input required className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mama Esther" />
+            <input required className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mama Fred" />
           </label>
           <label className="block">
             <span className="text-xs font-medium text-muted mb-1 block">Phone (optional)</span>
@@ -690,8 +690,8 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
                       </div>
                     </div>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isOverdue ? 'bg-brick/10 text-brick' :
-                        isDueToday ? 'bg-amber-500/10 text-amber-700' :
-                          'bg-brand-light text-brand-dark'
+                      isDueToday ? 'bg-amber-500/10 text-amber-700' :
+                        'bg-brand-light text-brand-dark'
                       }`}>
                       {isOverdue ? `⚠ Overdue` : isDueToday ? '⏰ Due today' : `Next: ${due.toLocaleDateString('en-UG', { day: 'numeric', month: 'short' })}`}
                     </span>

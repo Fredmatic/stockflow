@@ -138,12 +138,12 @@ export default function Products() {
           <h1 className="font-display text-xl font-semibold">Products</h1>
           <p className="text-muted text-sm">
             {business?.type === 'electronics' ? 'Phones, accessories & gadgets'
-            : business?.type === 'supermarket' ? 'Groceries & household items'
-            : business?.type === 'restaurant' ? 'Menu items & ingredients'
-            : business?.type === 'barbershop' ? 'Services & products'
-            : business?.type === 'clothing' ? 'Clothing & fashion items'
-            : business?.type === 'wholesale' ? 'Wholesale inventory'
-            : 'Your products & inventory'}
+              : business?.type === 'supermarket' ? 'Groceries & household items'
+                : business?.type === 'restaurant' ? 'Menu items & ingredients'
+                  : business?.type === 'barbershop' ? 'Services & products'
+                    : business?.type === 'clothing' ? 'Clothing & fashion items'
+                      : business?.type === 'wholesale' ? 'Wholesale inventory'
+                        : 'Your products & inventory'}
           </p>
         </div>
         <button onClick={openNew} className="btn-primary">+ Add product</button>
@@ -170,28 +170,28 @@ export default function Products() {
                   <div className="w-10 h-10 rounded-md bg-paper border border-line shrink-0" />
                 )}
                 <div className="min-w-0">
-                <div className="text-sm font-medium">
-                  {p.name}
-                  {p.has_variants && (
-                    <span className="ml-2 text-xs text-brand-dark bg-brand-light rounded-full px-2 py-0.5">
-                      {p.variantCount} type{p.variantCount === 1 ? '' : 's'}
-                    </span>
-                  )}
-                </div>
-                {p.category && (
-                  <div className="text-xs text-muted mt-0.5">
-                    <span className="bg-paper border border-line rounded px-1.5 py-0.5">{p.category}</span>
+                  <div className="text-sm font-medium">
+                    {p.name}
+                    {p.has_variants && (
+                      <span className="ml-2 text-xs text-brand-dark bg-brand-light rounded-full px-2 py-0.5">
+                        {p.variantCount} type{p.variantCount === 1 ? '' : 's'}
+                      </span>
+                    )}
                   </div>
-                )}
-                <div className="text-xs text-muted">
-                  {p.has_variants ? (
-                    p.priceRange[0] === p.priceRange[1]
-                      ? `UGX ${p.priceRange[0].toLocaleString()}`
-                      : `UGX ${p.priceRange[0].toLocaleString()}–${p.priceRange[1].toLocaleString()}`
-                  ) : (
-                    <>{p.sku ? `SKU ${p.sku} · ` : ''}UGX {Number(p.selling_price).toLocaleString()}</>
+                  {p.category && (
+                    <div className="text-xs text-muted mt-0.5">
+                      <span className="bg-paper border border-line rounded px-1.5 py-0.5">{p.category}</span>
+                    </div>
                   )}
-                </div>
+                  <div className="text-xs text-muted">
+                    {p.has_variants ? (
+                      p.priceRange[0] === p.priceRange[1]
+                        ? `UGX ${p.priceRange[0].toLocaleString()}`
+                        : `UGX ${p.priceRange[0].toLocaleString()}–${p.priceRange[1].toLocaleString()}`
+                    ) : (
+                      <>{p.sku ? `SKU ${p.sku} · ` : ''}UGX {Number(p.selling_price).toLocaleString()}</>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="text-right">
@@ -508,11 +508,11 @@ function ProductForm({ business, product, onClose, onSaved }) {
             <input required className="input" value={form.name} onChange={(e) => set('name', e.target.value)}
               placeholder={
                 business?.type === 'electronics' ? 'e.g. Samsung A15, Screen Guard'
-                : business?.type === 'restaurant' ? 'e.g. Chicken & Chips, Passion Juice'
-                : business?.type === 'barbershop' ? 'e.g. Haircut, Beard Trim'
-                : business?.type === 'clothing' ? 'e.g. Polo Shirt, Skinny Jeans'
-                : business?.type === 'supermarket' || business?.type === 'wholesale' ? 'e.g. Cooking Oil 2L, Bread'
-                : 'e.g. Product name'
+                  : business?.type === 'restaurant' ? 'e.g. Chicken & Chips, Passion Juice'
+                    : business?.type === 'barbershop' ? 'e.g. Haircut, Beard Trim'
+                      : business?.type === 'clothing' ? 'e.g. Polo Shirt, Skinny Jeans'
+                        : business?.type === 'supermarket' || business?.type === 'wholesale' ? 'e.g. Cooking Oil 2L, Bread'
+                          : 'e.g. Product name'
               }
             />
           </Field>
@@ -594,7 +594,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
             <div className="space-y-3 pt-1">
               <div className="text-xs font-medium text-muted">
                 {isElectronics
-                  ? 'Types (e.g. Ceramic, Full Glue) + phone model — each gets its own stock & price'
+                  ? 'Types (e.g. Cloths, Full Glue) + phone model — each gets its own stock & price'
                   : 'Types — each can have its own cost & selling price'}
               </div>
 

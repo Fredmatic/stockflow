@@ -43,7 +43,7 @@ function ContactForm() {
     <form onSubmit={sendToWhatsApp} className="card p-6 space-y-4">
       <div>
         <label className="text-xs font-medium text-muted block mb-1">Your name</label>
-        <input required className="input w-full" placeholder="e.g. John Tumwine"
+        <input required className="input w-full" placeholder="e.g. Mwanje"
           value={name} onChange={e => setName(e.target.value)} />
       </div>
       <div>

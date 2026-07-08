@@ -193,7 +193,7 @@ function NewLenderForm({ business, onClose, onSaved }) {
         <form onSubmit={handleSubmit} className="space-y-3">
           <label className="block">
             <span className="text-xs font-medium text-muted mb-1 block">Name</span>
-            <input required className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Uncle Peter" />
+            <input required className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Uncle Fred" />
           </label>
           <label className="block">
             <span className="text-xs font-medium text-muted mb-1 block">Phone (optional)</span>
