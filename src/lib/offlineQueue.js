@@ -48,6 +48,29 @@ export function removeFromQueue(localId) {
   setQueue(getQueue().filter((e) => e.localId !== localId))
 }
 
+export function markSyncFailed(localId) {
+  const queue = getQueue()
+  const updated = queue.map((e) => {
+    if (e.localId !== localId) return e
+    const attempts = (e.syncAttempts || 0) + 1
+    return { ...e, syncAttempts: attempts, lastFailedAt: new Date().toISOString(), permanentlyFailed: attempts >= 3 }
+  })
+  setQueue(updated)
+}
+
+export function getFailedSales() {
+  return getQueue().filter((e) => e.permanentlyFailed)
+}
+
+export function clearFailedSales() {
+  setQueue(getQueue().filter((e) => !e.permanentlyFailed))
+}
+
 export function queueCount() {
-  return getQueue().length
+  // Only count non-permanently-failed entries
+  return getQueue().filter((e) => !e.permanentlyFailed).length
+}
+
+export function failedCount() {
+  return getQueue().filter((e) => e.permanentlyFailed).length
 }

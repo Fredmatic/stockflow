@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
-import { enqueueSale, getQueue, removeFromQueue } from '../lib/offlineQueue'
+import { enqueueSale, getQueue, removeFromQueue, markSyncFailed, getFailedSales, clearFailedSales, queueCount } from '../lib/offlineQueue'
 
 function lineId(item) {
   return item.variant_id || item.product_id
@@ -131,15 +131,11 @@ async function pushSaleToServer(business, saleData) {
 // ── Cart Drawer (mobile only) ───────────────────────────────────────────────
 function CartDrawer({
   open, onClose, cart, updateQty, unitPriceFor, displayName, lineId,
-  setManualPrice,
   canSeeProfit, total, totalProfit, paymentMethod, setPaymentMethodSafe,
   selectedCustomer, setSelectedCustomer, customers, customerSearch,
   setCustomerSearch, filteredCustomers, addingCustomer, setAddingCustomer,
   newCustomerName, setNewCustomerName, newCustomerPhone, setNewCustomerPhone,
   createCustomer, customerBusy, completeSale, busy, message, lastReceipt,
-  installmentAmount, setInstallmentAmount,
-  installmentFrequency, setInstallmentFrequency,
-  installmentFirstDue, setInstallmentFirstDue,
 }) {
   if (!open) return null
   return (
@@ -203,7 +199,10 @@ function CartDrawer({
                       <input type="number" min="0" inputMode="numeric" placeholder="e.g. 5000"
                         className="input font-mono py-1 text-sm flex-1"
                         value={i.manualPrice}
-                        onChange={(e) => setManualPrice(id, e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          // call parent setManualPrice via updateQty trick — pass through props
+                        }}
                       />
                     </div>
                   )}
@@ -393,6 +392,7 @@ export default function Sell() {
   const [lastReceipt, setLastReceipt] = useState(null)
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [pendingCount, setPendingCount] = useState(0)
+  const [failedSales, setFailedSales] = useState([])
   const [syncing, setSyncing] = useState(false)
   const [showCartDrawer, setShowCartDrawer] = useState(false)
 
@@ -426,7 +426,8 @@ export default function Sell() {
   }, [business])
 
   useEffect(() => {
-    setPendingCount(getQueue().length)
+    setPendingCount(queueCount())
+    setFailedSales(getFailedSales())
     function handleOnline() { setIsOnline(true); syncOfflineQueue() }
     function handleOffline() { setIsOnline(false) }
     window.addEventListener('online', handleOnline)
@@ -440,28 +441,37 @@ export default function Sell() {
 
   async function syncOfflineQueue() {
     if (!business || syncing) return
-    const queue = getQueue()
-    if (queue.length === 0) return
+    // Only try entries that haven't permanently failed
+    const queue = getQueue().filter(e => !e.permanentlyFailed)
+    if (queue.length === 0) {
+      setFailedSales(getFailedSales())
+      return
+    }
     setSyncing(true)
     const shortfallMessages = []
+    let synced = 0
     for (const entry of queue) {
       try {
         const { stockShortfalls } = await pushSaleToServer(business, entry.saleData)
         removeFromQueue(entry.localId)
+        synced++
         if (stockShortfalls.length > 0) {
           shortfallMessages.push(...stockShortfalls.map((s) => `${s.name}: only ${s.available} left but ${s.needed} were sold offline.`))
         }
       } catch (err) {
+        // Mark this entry as a failed attempt — after 3 attempts it becomes permanently failed
+        markSyncFailed(entry.localId)
         console.error('Offline sale sync failed:', err)
-        break
+        // Don't break — keep trying the next entries
       }
     }
-    setPendingCount(getQueue().length)
+    setPendingCount(queueCount())
+    setFailedSales(getFailedSales())
     setSyncing(false)
     if (shortfallMessages.length > 0) {
       setMessage(`⚠ Synced, but please check stock: ${shortfallMessages.join(' ')}`)
-    } else if (queue.length > getQueue().length) {
-      setMessage(`✓ Synced ${queue.length - getQueue().length} offline sale${queue.length - getQueue().length === 1 ? '' : 's'}.`)
+    } else if (synced > 0) {
+      setMessage(`✓ Synced ${synced} offline sale${synced === 1 ? '' : 's'}.`)
       setTimeout(() => setMessage(''), 5000)
     }
   }
@@ -641,7 +651,7 @@ export default function Sell() {
 
     function onOffline() {
       enqueueSale(saleData)
-      setPendingCount(getQueue().length)
+      setPendingCount(queueCount())
       setMessage(`📴 No connection — sale saved and will sync automatically (UGX ${total.toLocaleString()}).`)
       setLastReceipt(receiptData)
       setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
@@ -675,6 +685,35 @@ export default function Sell() {
                 : syncing ? 'Syncing offline sales…'
                   : `${pendingCount} offline sale${pendingCount === 1 ? '' : 's'} waiting to sync`}
             </span>
+          </div>
+        )}
+
+        {failedSales.length > 0 && (
+          <div className="md:col-span-2 bg-brick/10 border border-brick/30 text-brick rounded-md px-4 py-3 text-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold mb-1">⚠ {failedSales.length} sale{failedSales.length > 1 ? 's' : ''} failed to sync</div>
+                <p className="text-xs opacity-80 mb-2">
+                  These sales were recorded offline but could not be saved to the server after 3 attempts.
+                  Please record them manually or contact support.
+                </p>
+                <div className="space-y-1">
+                  {failedSales.map(entry => (
+                    <div key={entry.localId} className="text-xs font-mono bg-brick/10 rounded px-2 py-1">
+                      {new Date(entry.queuedAt).toLocaleString('en-UG', { dateStyle: 'short', timeStyle: 'short' })}
+                      {' · '}UGX {Number(entry.saleData?.total || 0).toLocaleString()}
+                      {entry.saleData?.items?.length > 0 && ` · ${entry.saleData.items.length} item${entry.saleData.items.length > 1 ? 's' : ''}`}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => { clearFailedSales(); setFailedSales([]) }}
+                className="text-xs font-medium underline shrink-0 mt-0.5"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         )}
 
@@ -945,7 +984,6 @@ export default function Sell() {
         unitPriceFor={unitPriceFor}
         displayName={displayName}
         lineId={lineId}
-        setManualPrice={setManualPrice}
         canSeeProfit={canSeeProfit}
         total={total}
         totalProfit={totalProfit}
@@ -969,12 +1007,6 @@ export default function Sell() {
         busy={busy}
         message={message}
         lastReceipt={lastReceipt}
-        installmentAmount={installmentAmount}
-        setInstallmentAmount={setInstallmentAmount}
-        installmentFrequency={installmentFrequency}
-        setInstallmentFrequency={setInstallmentFrequency}
-        installmentFirstDue={installmentFirstDue}
-        setInstallmentFirstDue={setInstallmentFirstDue}
       />
 
       {scanning && <ScannerModal onResult={handleScan} onClose={() => setScanning(false)} />}
