@@ -227,13 +227,13 @@ export default function StockIn() {
       )}
 
       {showHistory && (
-        <SuppliersPanel business={business} suppliers={suppliers} onClose={() => setShowHistory(false)} onChanged={loadSuppliers} />
+        <SuppliersPanel business={business} suppliers={suppliers} activeStaff={activeStaff} onClose={() => setShowHistory(false)} onChanged={loadSuppliers} />
       )}
     </div>
   )
 }
 
-function SuppliersPanel({ business, suppliers, onClose, onChanged }) {
+function SuppliersPanel({ business, suppliers, activeStaff, onClose, onChanged }) {
   const [supplierTotals, setSupplierTotals] = useState({})
   const [loading, setLoading] = useState(true)
   const [selectedSupplier, setSelectedSupplier] = useState(null)
@@ -250,15 +250,15 @@ function SuppliersPanel({ business, suppliers, onClose, onChanged }) {
       .not('supplier_id', 'is', null)
 
     const totals = {}
-    ;(data || []).forEach((m) => {
-      if (!totals[m.supplier_id]) totals[m.supplier_id] = { totalSpent: 0, totalQty: 0, lastDate: null }
-      const cost = (Number(m.unit_cost) || 0) * Number(m.quantity)
-      totals[m.supplier_id].totalSpent += cost
-      totals[m.supplier_id].totalQty += Number(m.quantity)
-      if (!totals[m.supplier_id].lastDate || new Date(m.created_at) > new Date(totals[m.supplier_id].lastDate)) {
-        totals[m.supplier_id].lastDate = m.created_at
-      }
-    })
+      ; (data || []).forEach((m) => {
+        if (!totals[m.supplier_id]) totals[m.supplier_id] = { totalSpent: 0, totalQty: 0, lastDate: null }
+        const cost = (Number(m.unit_cost) || 0) * Number(m.quantity)
+        totals[m.supplier_id].totalSpent += cost
+        totals[m.supplier_id].totalQty += Number(m.quantity)
+        if (!totals[m.supplier_id].lastDate || new Date(m.created_at) > new Date(totals[m.supplier_id].lastDate)) {
+          totals[m.supplier_id].lastDate = m.created_at
+        }
+      })
     setSupplierTotals(totals)
     setLoading(false)
   }
@@ -276,6 +276,7 @@ function SuppliersPanel({ business, suppliers, onClose, onChanged }) {
             business={business}
             supplier={selectedSupplier}
             onBack={() => setSelectedSupplier(null)}
+            activeStaff={activeStaff}
           />
         ) : loading ? (
           <p className="text-sm text-muted">Loading…</p>
@@ -315,58 +316,248 @@ function SuppliersPanel({ business, suppliers, onClose, onChanged }) {
   )
 }
 
-function SupplierHistory({ business, supplier, onBack }) {
+function SupplierHistory({ business, supplier, onBack, activeStaff }) {
   const [movements, setMovements] = useState([])
+  const [debts, setDebts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('debts') // 'debts' | 'history'
+
+  // Debt form
+  const [showDebtForm, setShowDebtForm] = useState(false)
+  const [debtAmount, setDebtAmount] = useState('')
+  const [debtNote, setDebtNote] = useState('')
+  const [debtBusy, setDebtBusy] = useState(false)
+
+  // Payment
+  const [payingDebtId, setPayingDebtId] = useState(null)
+  const [payAmount, setPayAmount] = useState('')
+  const [payNote, setPayNote] = useState('')
+  const [payBusy, setPayBusy] = useState(false)
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
-      .from('stock_movements')
-      .select('id, quantity, unit_cost, note, created_at, products(name), product_variants(name)')
-      .eq('business_id', business.id)
-      .eq('supplier_id', supplier.id)
-      .eq('type', 'restock')
-      .order('created_at', { ascending: false })
-    setMovements(data || [])
+    const [{ data: moves }, { data: debtData }] = await Promise.all([
+      supabase.from('stock_movements')
+        .select('id, quantity, unit_cost, note, created_at, products(name), product_variants(name)')
+        .eq('business_id', business.id).eq('supplier_id', supplier.id).eq('type', 'restock')
+        .order('created_at', { ascending: false }),
+      supabase.from('supplier_debts')
+        .select('*, supplier_payments(id, amount, note, paid_at)')
+        .eq('business_id', business.id).eq('supplier_id', supplier.id)
+        .order('created_at', { ascending: false }),
+    ])
+    setMovements(moves || [])
+    setDebts(debtData || [])
     setLoading(false)
   }
 
-  const totalSpent = movements.reduce((sum, m) => sum + (Number(m.unit_cost) || 0) * Number(m.quantity), 0)
+  async function addDebt(e) {
+    e.preventDefault()
+    if (!debtAmount) return
+    setDebtBusy(true)
+    await supabase.from('supplier_debts').insert({
+      business_id: business.id,
+      supplier_id: supplier.id,
+      total_amount: Number(debtAmount),
+      amount_paid: 0,
+      note: debtNote || null,
+    })
+    setDebtAmount(''); setDebtNote(''); setShowDebtForm(false)
+    load()
+    setDebtBusy(false)
+  }
+
+  async function recordPayment(debt) {
+    const amt = Number(payAmount)
+    if (!amt || amt <= 0) return
+    setPayBusy(true)
+    const newPaid = Math.min(Number(debt.amount_paid) + amt, Number(debt.total_amount))
+    await Promise.all([
+      supabase.from('supplier_payments').insert({
+        business_id: business.id, supplier_id: supplier.id,
+        debt_id: debt.id, amount: amt,
+        note: payNote || null, staff_user_id: activeStaff?.id || null,
+      }),
+      supabase.from('supplier_debts').update({ amount_paid: newPaid }).eq('id', debt.id),
+    ])
+    setPayAmount(''); setPayNote(''); setPayingDebtId(null)
+    load()
+    setPayBusy(false)
+  }
+
+  const totalSpent = movements.reduce((s, m) => s + (Number(m.unit_cost) || 0) * Number(m.quantity), 0)
+  const totalOwed = debts.reduce((s, d) => s + Math.max(0, Number(d.total_amount) - Number(d.amount_paid)), 0)
 
   return (
     <div>
       <button onClick={onBack} className="text-xs text-brand-dark font-medium mb-3">← All suppliers</button>
-      <div className="mb-1">
+      <div className="mb-3">
         <div className="font-medium">{supplier.name}</div>
         <div className="text-xs text-muted">{supplier.phone || 'No phone saved'}</div>
       </div>
-      <div className="card px-4 py-3 my-3 flex items-center justify-between">
-        <span className="text-sm text-muted">Total spent with this supplier</span>
-        <span className="font-mono font-semibold">UGX {totalSpent.toLocaleString()}</span>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="card px-3 py-2">
+          <div className="text-xs text-muted mb-0.5">Total spent</div>
+          <div className="font-mono font-semibold text-sm">UGX {totalSpent.toLocaleString()}</div>
+        </div>
+        <div className={`card px-3 py-2 ${totalOwed > 0 ? 'border-brick/40 bg-brick/5' : ''}`}>
+          <div className="text-xs text-muted mb-0.5">Still owe them</div>
+          <div className={`font-mono font-semibold text-sm ${totalOwed > 0 ? 'text-brick' : 'text-brand'}`}>
+            UGX {totalOwed.toLocaleString()}
+          </div>
+        </div>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-muted">Loading…</p>
-      ) : movements.length === 0 ? (
-        <p className="text-sm text-muted text-center py-6">No restocks recorded from this supplier yet.</p>
+      {/* Tabs */}
+      <div className="flex gap-1 bg-paper rounded-md p-1 border border-line mb-4">
+        {[['debts', 'Debts & Payments'], ['history', 'Restock History']].map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex-1 text-xs py-1.5 rounded font-medium transition-colors ${tab === key ? 'bg-paper-raised shadow-sm text-ink border border-line' : 'text-muted'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? <p className="text-sm text-muted">Loading…</p> : tab === 'history' ? (
+        // ── Restock history tab ──
+        movements.length === 0 ? (
+          <p className="text-sm text-muted text-center py-6">No restocks from this supplier yet.</p>
+        ) : (
+          <div className="card divide-y divide-line">
+            {movements.map((m) => (
+              <div key={m.id} className="px-4 py-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span>{m.product_variants?.name ? `${m.products?.name} — ${m.product_variants.name}` : m.products?.name}</span>
+                  <span className="font-mono">{m.quantity} units</span>
+                </div>
+                <div className="text-xs text-muted mt-0.5">
+                  {new Date(m.created_at).toLocaleDateString()}
+                  {m.unit_cost ? ` · UGX ${Number(m.unit_cost).toLocaleString()}/unit · Total UGX ${(Number(m.unit_cost) * m.quantity).toLocaleString()}` : ''}
+                  {m.note ? ` · ${m.note}` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : (
-        <div className="card divide-y divide-line">
-          {movements.map((m) => (
-            <div key={m.id} className="px-4 py-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span>{m.product_variants?.name ? `${m.products?.name} — ${m.product_variants.name}` : m.products?.name}</span>
-                <span className="font-mono">{m.quantity} units</span>
+        // ── Debts tab ──
+        <div className="space-y-3">
+          {/* Add debt button */}
+          {!showDebtForm && (
+            <button onClick={() => setShowDebtForm(true)}
+              className="btn-primary w-full text-sm">
+              + Record debt from this supplier
+            </button>
+          )}
+
+          {showDebtForm && (
+            <form onSubmit={addDebt} className="card p-3 space-y-2">
+              <div className="text-xs font-semibold text-muted">New supplier debt</div>
+              <label className="block">
+                <span className="text-xs text-muted block mb-1">Total amount owed (UGX)</span>
+                <input required type="number" min="1" className="input font-mono"
+                  placeholder="e.g. 500000" value={debtAmount}
+                  onChange={e => setDebtAmount(e.target.value)} autoFocus />
+              </label>
+              <label className="block">
+                <span className="text-xs text-muted block mb-1">Note (optional)</span>
+                <input className="input" placeholder="e.g. 10 phones on credit"
+                  value={debtNote} onChange={e => setDebtNote(e.target.value)} />
+              </label>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowDebtForm(false)} className="btn-secondary flex-1 text-sm">Cancel</button>
+                <button type="submit" disabled={debtBusy} className="btn-primary flex-1 text-sm">
+                  {debtBusy ? 'Saving…' : 'Save debt'}
+                </button>
               </div>
-              <div className="text-xs text-muted mt-0.5">
-                {new Date(m.created_at).toLocaleDateString()}
-                {m.unit_cost ? ` · UGX ${Number(m.unit_cost).toLocaleString()}/unit · Total UGX ${(Number(m.unit_cost) * m.quantity).toLocaleString()}` : ''}
-                {m.note ? ` · ${m.note}` : ''}
+            </form>
+          )}
+
+          {/* Debt list */}
+          {debts.length === 0 ? (
+            <p className="text-sm text-muted text-center py-6">No debts recorded for this supplier.</p>
+          ) : debts.map(debt => {
+            const paid = Number(debt.amount_paid)
+            const total = Number(debt.total_amount)
+            const remaining = total - paid
+            const pct = Math.min(100, Math.round((paid / total) * 100))
+            const isPaying = payingDebtId === debt.id
+            const isSettled = remaining <= 0
+
+            return (
+              <div key={debt.id} className="card p-3">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="text-sm font-medium">
+                      {isSettled ? '✅ Settled' : `UGX ${remaining.toLocaleString()} remaining`}
+                    </div>
+                    {debt.note && <div className="text-xs text-muted mt-0.5">{debt.note}</div>}
+                    <div className="text-xs text-muted">{new Date(debt.created_at).toLocaleDateString()}</div>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isSettled ? 'bg-brand-light text-brand' : 'bg-brick/10 text-brick'}`}>
+                    {isSettled ? 'Paid' : 'Owing'}
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="mb-2">
+                  <div className="flex justify-between text-xs text-muted mb-1">
+                    <span>Paid: UGX {paid.toLocaleString()}</span>
+                    <span>Total: UGX {total.toLocaleString()}</span>
+                  </div>
+                  <div className="h-2 bg-line rounded-full overflow-hidden">
+                    <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="text-xs text-muted mt-1">{pct}% paid</div>
+                </div>
+
+                {/* Payment history */}
+                {(debt.supplier_payments || []).length > 0 && (
+                  <div className="border-t border-line pt-2 mb-2">
+                    <div className="text-xs text-muted mb-1 font-medium">Payment history</div>
+                    {(debt.supplier_payments || []).map(p => (
+                      <div key={p.id} className="flex justify-between text-xs text-muted py-0.5">
+                        <span>{new Date(p.paid_at).toLocaleDateString()}{p.note ? ` · ${p.note}` : ''}</span>
+                        <span className="font-mono">UGX {Number(p.amount).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Record payment */}
+                {!isSettled && (
+                  isPaying ? (
+                    <div className="space-y-2 pt-2 border-t border-line">
+                      <input type="number" min="1" className="input font-mono text-sm"
+                        placeholder="Amount paid today (UGX)"
+                        value={payAmount} onChange={e => setPayAmount(e.target.value)} autoFocus />
+                      <input className="input text-sm"
+                        placeholder="Note e.g. mobile money (optional)"
+                        value={payNote} onChange={e => setPayNote(e.target.value)} />
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => { setPayingDebtId(null); setPayAmount(''); setPayNote('') }}
+                          className="btn-secondary flex-1 text-sm">Cancel</button>
+                        <button type="button" onClick={() => recordPayment(debt)}
+                          disabled={payBusy || !payAmount}
+                          className="btn-primary flex-1 text-sm">
+                          {payBusy ? '…' : 'Record payment'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setPayingDebtId(debt.id); setPayAmount('') }}
+                      className="btn-primary w-full text-sm mt-1">
+                      Record payment to supplier
+                    </button>
+                  )
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
