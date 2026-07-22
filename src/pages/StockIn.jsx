@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
@@ -7,7 +8,7 @@ function displayName(item) {
 }
 
 export default function StockIn() {
-  const { business, activeStaff } = useAuth()
+  const { business, activeStaff, setBusiness } = useAuth()
   const [items, setItems] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [search, setSearch] = useState('')
@@ -91,9 +92,32 @@ export default function StockIn() {
       await supabase.from(table).update({ cost_price: Number(unitCost) }).eq('id', idField)
     }
 
+    // A cost was entered — deduct what was just spent from the capital
+    // balance and log it, so the owner can see exactly what their money
+    // went to (and the Spending tab's Today/Yesterday/etc totals pick it up).
+    let newBalance = null
+    const totalCost = unitCost && Number(unitCost) > 0 ? Number(unitCost) * Number(quantity) : 0
+    if (totalCost > 0 && business) {
+      newBalance = Number(business.capital_balance || 0) - totalCost
+      await supabase.from('businesses').update({ capital_balance: newBalance }).eq('id', business.id)
+      await supabase.from('capital_transactions').insert({
+        business_id: business.id,
+        type: 'stock_purchase',
+        amount: -totalCost,
+        product_id: selected.product_id,
+        variant_id: selected.variant_id || null,
+        note: `Restock: ${quantity} x ${displayName(selected)}`,
+        staff_user_id: activeStaff?.id || null,
+      })
+      setBusiness({ ...business, capital_balance: newBalance })
+    }
+
     const supplierName = suppliers.find((s) => s.id === supplierId)?.name
+    const addedLine = `Added ${quantity} of ${displayName(selected)} to stock${supplierName ? ` from ${supplierName}` : ''}.`
     setMessage(
-      `Added ${quantity} of ${displayName(selected)} to stock${supplierName ? ` from ${supplierName}` : ''}.`
+      totalCost > 0
+        ? `${addedLine} You've used UGX ${totalCost.toLocaleString()} on ${displayName(selected)} — capital balance UGX ${newBalance.toLocaleString()}.`
+        : addedLine
     )
     setSelected(null)
     setQuantity('')
@@ -103,7 +127,7 @@ export default function StockIn() {
     setSearch('')
     setBusy(false)
     loadProducts()
-    setTimeout(() => setMessage(''), 4000)
+    setTimeout(() => setMessage(''), 6000)
   }
 
   return (
@@ -117,6 +141,24 @@ export default function StockIn() {
           Suppliers →
         </button>
       </div>
+
+      {business && (
+        activeStaff?.role === 'owner' ? (
+          <Link
+            to="/spending"
+            className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${Number(business.capital_balance || 0) < 0 ? 'bg-brick/10 text-brick' : 'bg-paper-raised border border-line'
+              }`}
+          >
+            <span className="text-muted">Capital balance</span>
+            <span className="font-mono font-semibold">UGX {Number(business.capital_balance || 0).toLocaleString()} →</span>
+          </Link>
+        ) : (
+          <div className="flex items-center justify-between rounded-md px-3 py-2 text-sm bg-paper-raised border border-line">
+            <span className="text-muted">Capital balance</span>
+            <span className="font-mono font-semibold">UGX {Number(business.capital_balance || 0).toLocaleString()}</span>
+          </div>
+        )
+      )}
 
       {message && <p className="text-sm text-brand-dark bg-brand-light rounded-md px-3 py-2">{message}</p>}
 

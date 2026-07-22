@@ -22,6 +22,7 @@ const NAV_ITEMS = [
     { to: '/customers', label: 'Customers', icon: '⊙' },
     { to: '/lenders', label: 'People I Owe', icon: '◐' },
     { to: '/expenses', label: 'Expenses', icon: '−' },
+    { to: '/spending', label: 'Spending', icon: '◆' },
     { to: '/reminders', label: 'Reminders', icon: '⏰' },
     { to: '/staff', label: 'Staff', icon: '◍' },
     { to: '/reports', label: 'Reports', icon: '📊' },

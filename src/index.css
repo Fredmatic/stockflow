@@ -148,6 +148,19 @@ body {
     color: var(--color-ink);
 }
 
+/* Mobile browsers auto-zoom the page when a focused input's font-size is
+   under 16px. That was the real cause of the page "zooming in" whenever
+   someone tapped a field — not something the viewport meta tag alone can
+   fix. Bumping just the focus-size on small screens keeps the zoom from
+   triggering at all, so the layout stays static like every other page. */
+@media (max-width: 768px) {
+    .input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
+}
+
 .input:focus {
     border-color: var(--color-brand);
 }

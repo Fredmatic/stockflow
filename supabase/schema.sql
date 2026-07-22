@@ -20,6 +20,7 @@ create table businesses (
             'supermarket'
         )
     ),
+    capital_balance numeric(14, 2) not null default 0,
     created_at timestamptz not null default now()
 );
 
@@ -146,6 +147,25 @@ create table sale_items (
     unit_price numeric(12, 2) not null,
     unit_cost numeric(12, 2) not null default 0
 );
+
+-- Every change to the owner's capital balance is a row here: a 'topup'
+-- (owner adding cash in) or a 'stock_purchase' (auto-deducted whenever
+-- Stock In records a restock with a cost price). Powers the Spending tab.
+create table capital_transactions (
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    type text not null check (
+        type in ('topup', 'stock_purchase', 'adjustment')
+    ),
+    amount numeric(14, 2) not null, -- positive = added to balance, negative = deducted
+    product_id uuid references products (id) on delete set null,
+    variant_id uuid references product_variants (id) on delete set null,
+    note text,
+    staff_user_id uuid references staff_users (id) on delete set null,
+    created_at timestamptz not null default now()
+);
+
+create index on capital_transactions (business_id, created_at desc);
 
 -- Operating expenses (rent, transport, utilities, etc.) — tracked
 -- separately from cost-of-goods so "net profit" can be shown alongside
@@ -365,6 +385,8 @@ alter table sale_items enable row level security;
 
 alter table expenses enable row level security;
 
+alter table capital_transactions enable row level security;
+
 alter table debt_transactions enable row level security;
 
 alter table lenders enable row level security;
@@ -442,6 +464,15 @@ create policy "owner_full_access" on sale_items for all using (
 );
 
 create policy "owner_full_access" on expenses for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
+
+create policy "owner_full_access" on capital_transactions for all using (
     business_id in (
         select id
         from businesses

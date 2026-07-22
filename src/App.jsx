@@ -18,6 +18,7 @@ import Customers from './pages/Customers'
 import Lenders from './pages/Lenders'
 import Staff from './pages/Staff'
 import Expenses from './pages/Expenses'
+import Spending from './pages/Spending'
 import Reports from './pages/Reports'
 import Reminders from './pages/Reminders'
 
@@ -115,6 +116,7 @@ export default function App() {
                 <Route path="/customers" element={<Restricted path="/customers"><Customers /></Restricted>} />
                 <Route path="/lenders" element={<Restricted path="/lenders"><Lenders /></Restricted>} />
                 <Route path="/expenses" element={<Restricted path="/expenses"><Expenses /></Restricted>} />
+                <Route path="/spending" element={<Restricted path="/spending"><Spending /></Restricted>} />
                 <Route path="/staff" element={<Restricted path="/staff"><Staff /></Restricted>} />
                 <Route path="/reports" element={<Restricted path="/reports"><Reports /></Restricted>} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />

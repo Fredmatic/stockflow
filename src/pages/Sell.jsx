@@ -84,6 +84,7 @@ async function pushSaleToServer(business, saleData) {
       total_amount: saleData.total,
       is_credit: saleData.is_credit,
       customer_id: saleData.customer_id,
+      ...(saleData.sale_date ? { created_at: new Date(saleData.sale_date).toISOString() } : {}),
     })
     .select()
     .single()
@@ -107,7 +108,8 @@ async function pushSaleToServer(business, saleData) {
     type: 'sale',
     quantity: -i.quantity,
     staff_user_id: saleData.staff_user_id,
-    note: `Sale ${sale.id}${saleData.queuedOffline ? ' (synced from offline)' : ''}`,
+    note: `Sale ${sale.id}${saleData.queuedOffline ? ' (synced from offline)' : ''}${saleData.sale_date ? ' (backdated)' : ''}`,
+    ...(saleData.sale_date ? { created_at: new Date(saleData.sale_date).toISOString() } : {}),
   }))
   const { error: moveError } = await supabase.from('stock_movements').insert(movements)
   if (moveError) throw moveError
@@ -128,6 +130,41 @@ async function pushSaleToServer(business, saleData) {
   return { sale, stockShortfalls }
 }
 
+// Lets the owner record a sale as having happened earlier — e.g. they
+// forgot to log yesterday's sale. Only rendered for owners; staff/cashiers
+// never see it, so every sale they record is timestamped "now" as usual.
+function BackdateControl({ show, onToggle, value, onChange }) {
+  const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+  return (
+    <div className="mb-4">
+      {!show ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="text-xs text-muted underline decoration-dotted"
+        >
+          Forgot to log this earlier? Backdate this sale
+        </button>
+      ) : (
+        <div className="card p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted">When did this sale actually happen?</span>
+            <button type="button" onClick={() => { onToggle(); onChange('') }} className="text-xs text-muted">Cancel</button>
+          </div>
+          <input
+            type="datetime-local"
+            className="input font-mono text-sm"
+            max={nowLocal}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <p className="text-[11px] text-muted">This sale will be recorded with that date/time instead of now, and stock will still be deducted.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Cart Drawer (mobile only) ───────────────────────────────────────────────
 function CartDrawer({
   open, onClose, cart, updateQty, setManualPrice, unitPriceFor, displayName, lineId,
@@ -136,6 +173,7 @@ function CartDrawer({
   setCustomerSearch, filteredCustomers, addingCustomer, setAddingCustomer,
   newCustomerName, setNewCustomerName, newCustomerPhone, setNewCustomerPhone,
   createCustomer, customerBusy, completeSale, busy, message, lastReceipt,
+  isOwner, showBackdate, setShowBackdate, backdateAt, setBackdateAt,
 }) {
   if (!open) return null
   return (
@@ -317,6 +355,10 @@ function CartDrawer({
             )}
           </div>
 
+          {isOwner && (
+            <BackdateControl show={showBackdate} onToggle={() => setShowBackdate((v) => !v)} value={backdateAt} onChange={setBackdateAt} />
+          )}
+
           {/* Total */}
           <div className={`flex items-center justify-between px-1 ${canSeeProfit ? 'mb-1' : 'mb-4'}`}>
             <span className="text-sm font-medium">Total</span>
@@ -398,6 +440,12 @@ export default function Sell() {
   const [scanMessage, setScanMessage] = useState('')
   const [justAddedId, setJustAddedId] = useState(null)
   const cartSectionRef = useRef(null)
+
+  // Owner-only: record a sale that actually happened earlier (e.g. forgot
+  // to log yesterday's sale). Empty string means "now", the normal case.
+  const [backdateAt, setBackdateAt] = useState('')
+  const [showBackdate, setShowBackdate] = useState(false)
+  const isOwner = activeStaff?.role === 'owner'
 
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [installmentAmount, setInstallmentAmount] = useState('')
@@ -594,6 +642,7 @@ export default function Sell() {
       is_credit: paymentMethod === 'credit' || paymentMethod === 'installments',
       customer_id: (paymentMethod === 'credit' || paymentMethod === 'installments') ? selectedCustomer.id : null,
       is_installment: paymentMethod === 'installments',
+      sale_date: isOwner && backdateAt ? backdateAt : null,
       items: cart.map((i) => ({
         product_id: i.item.product_id,
         variant_id: i.item.variant_id || null,
@@ -609,7 +658,7 @@ export default function Sell() {
       items: cart.map((i) => ({ name: displayName(i.item), quantity: i.quantity, unitPrice: unitPriceFor(i) })),
       total, paymentMethod,
       customerName: paymentMethod === 'credit' ? selectedCustomer.name : null,
-      date: new Date(),
+      date: saleData.sale_date ? new Date(saleData.sale_date) : new Date(),
     }
 
     async function createInstallmentPlan(saleId) {
@@ -643,6 +692,7 @@ export default function Sell() {
       setLastReceipt(receiptData)
       setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
       setShowCartDrawer(false)
+      setBackdateAt(''); setShowBackdate(false)
       setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
     }
 
@@ -653,6 +703,7 @@ export default function Sell() {
       setLastReceipt(receiptData)
       setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
       setShowCartDrawer(false)
+      setBackdateAt(''); setShowBackdate(false)
       setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
     }
 
@@ -937,6 +988,10 @@ export default function Sell() {
             </div>
           )}
 
+          {isOwner && (
+            <BackdateControl show={showBackdate} onToggle={() => setShowBackdate((v) => !v)} value={backdateAt} onChange={setBackdateAt} />
+          )}
+
           <div className={`flex items-center justify-between px-1 ${canSeeProfit ? 'mb-1' : 'mb-4'}`}>
             <span className="text-sm font-medium">Total</span>
             <span className="font-mono text-lg font-semibold">UGX {total.toLocaleString()}</span>
@@ -1002,6 +1057,11 @@ export default function Sell() {
         createCustomer={createCustomer}
         customerBusy={customerBusy}
         completeSale={completeSale}
+        isOwner={isOwner}
+        showBackdate={showBackdate}
+        setShowBackdate={setShowBackdate}
+        backdateAt={backdateAt}
+        setBackdateAt={setBackdateAt}
         busy={busy}
         message={message}
         lastReceipt={lastReceipt}

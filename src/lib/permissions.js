@@ -14,6 +14,7 @@ export const ROUTE_ACCESS = {
   '/customers': ['owner', 'staff'],
   '/lenders': ['owner'],
   '/expenses': ['owner'],
+  '/spending': ['owner'],
   '/staff': ['owner'],
   '/reports': ['owner'],
   '/reminders': ['owner'],
