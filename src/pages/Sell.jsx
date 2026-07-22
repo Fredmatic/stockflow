@@ -127,20 +127,21 @@ async function pushSaleToServer(business, saleData) {
     if (debtError) throw debtError
   }
 
-  // Cash sales put money back in hand straight away, so they flow back
-  // into the capital balance. Credit/installment sales don't — that money
-  // only lands in capital once it's actually collected (see the debt
-  // payment / installment payment recording in Customers.jsx).
+  // Cash sales put cash back in hand straight away, but only the cost
+  // portion — the money that was originally spent buying that stock. The
+  // markup/profit on top is real earnings, not capital, so it's left out
+  // here (it still shows up as profit in Sales/Reports as usual).
   let capitalBalanceAfter = null
-  if (!saleData.is_credit && Number(saleData.total) > 0) {
+  const costRecovered = saleData.items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unit_cost || 0), 0)
+  if (!saleData.is_credit && costRecovered > 0) {
     const { data: biz } = await supabase.from('businesses').select('capital_balance').eq('id', business.id).single()
-    capitalBalanceAfter = Number(biz?.capital_balance || 0) + Number(saleData.total)
+    capitalBalanceAfter = Number(biz?.capital_balance || 0) + costRecovered
     await supabase.from('businesses').update({ capital_balance: capitalBalanceAfter }).eq('id', business.id)
     await supabase.from('capital_transactions').insert({
       business_id: business.id,
       type: 'sale_income',
-      amount: saleData.total,
-      note: `Cash sale${saleData.queuedOffline ? ' (synced from offline)' : ''}${saleData.sale_date ? ' (backdated)' : ''}`,
+      amount: costRecovered,
+      note: `Cash sale — cost recovered${saleData.queuedOffline ? ' (synced from offline)' : ''}${saleData.sale_date ? ' (backdated)' : ''}`,
       staff_user_id: saleData.staff_user_id,
       ...(saleData.sale_date ? { created_at: new Date(saleData.sale_date).toISOString() } : {}),
     })
