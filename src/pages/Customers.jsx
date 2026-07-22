@@ -1,6 +1,25 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+
+// Money collected from a customer paying down credit/installments is cash
+// in hand, same as a cash sale — so it flows back into the capital balance
+// (logged as 'debt_payment' so the Spending tab can show it distinctly
+// from cash sales and top-ups).
+async function creditCapitalBalance(business, setBusiness, amount, note, staffId) {
+  if (!business || !amount || amount <= 0) return
+  const { data: biz } = await supabase.from('businesses').select('capital_balance').eq('id', business.id).single()
+  const newBalance = Number(biz?.capital_balance || 0) + Number(amount)
+  await supabase.from('businesses').update({ capital_balance: newBalance }).eq('id', business.id)
+  await supabase.from('capital_transactions').insert({
+    business_id: business.id,
+    type: 'debt_payment',
+    amount: Number(amount),
+    note,
+    staff_user_id: staffId || null,
+  })
+  setBusiness((prev) => (prev ? { ...prev, capital_balance: newBalance } : prev))
+}
 import { canAccess } from '../lib/permissions'
 
 function normalizePhone(phone) {
@@ -317,6 +336,7 @@ function NewCustomerForm({ business, onClose, onSaved }) {
 }
 
 function CustomerDetail({ business, activeStaff, customer, onClose, onChanged }) {
+  const { setBusiness } = useAuth()
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -420,6 +440,7 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
           type: 'payment', amount: amt, note: `Installment payment (${plan.frequency})`,
         }),
       ])
+      await creditCapitalBalance(business, setBusiness, amt, `Installment payment — ${customer.name}`, activeStaff?.id)
       setPlanPayAmount(''); setPayingPlanId(null)
       load(); onChanged()
     } catch (err) {
@@ -444,6 +465,7 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
         staff_user_id: activeStaff?.id || null,
       })
       if (err) throw err
+      await creditCapitalBalance(business, setBusiness, Number(paymentAmount), `Payment from ${customer.name}${paymentNote ? ` — ${paymentNote}` : ''}`, activeStaff?.id)
       setPaymentAmount('')
       setPaymentNote('')
       await load()

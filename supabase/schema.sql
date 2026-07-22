@@ -155,7 +155,7 @@ create table capital_transactions (
     id uuid primary key default gen_random_uuid (),
     business_id uuid not null references businesses (id) on delete cascade,
     type text not null check (
-        type in ('topup', 'stock_purchase', 'adjustment')
+        type in ('topup', 'stock_purchase', 'sale_income', 'debt_payment', 'adjustment')
     ),
     amount numeric(14, 2) not null, -- positive = added to balance, negative = deducted
     product_id uuid references products (id) on delete set null,

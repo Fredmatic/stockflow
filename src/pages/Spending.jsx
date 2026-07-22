@@ -42,6 +42,8 @@ function txnLabel(t) {
     const base = t.products?.name || 'Deleted product'
     return t.product_variants?.name ? `${base} — ${t.product_variants.name}` : base
   }
+  if (t.type === 'sale_income') return t.note || 'Cash sale'
+  if (t.type === 'debt_payment') return t.note || 'Payment received'
   return t.note || 'Adjustment'
 }
 
@@ -80,12 +82,12 @@ export default function Spending() {
 
   const totals = useMemo(() => {
     const spent = txns
-      .filter((t) => t.type === 'stock_purchase')
+      .filter((t) => Number(t.amount) < 0)
       .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0)
-    const toppedUp = txns
-      .filter((t) => t.type === 'topup')
+    const received = txns
+      .filter((t) => Number(t.amount) > 0)
       .reduce((sum, t) => sum + Number(t.amount), 0)
-    return { spent, toppedUp }
+    return { spent, received }
   }, [txns])
 
   async function handleTopUp(e) {
@@ -185,12 +187,12 @@ export default function Spending() {
         <>
           <div className="grid grid-cols-2 gap-2">
             <div className="card px-3 py-2">
-              <div className="text-xs text-muted mb-0.5">Spent on stock</div>
+              <div className="text-xs text-muted mb-0.5">Spent</div>
               <div className="font-mono font-semibold text-sm text-brick">UGX {totals.spent.toLocaleString()}</div>
             </div>
             <div className="card px-3 py-2">
-              <div className="text-xs text-muted mb-0.5">Topped up</div>
-              <div className="font-mono font-semibold text-sm text-brand">UGX {totals.toppedUp.toLocaleString()}</div>
+              <div className="text-xs text-muted mb-0.5">Received</div>
+              <div className="font-mono font-semibold text-sm text-brand">UGX {totals.received.toLocaleString()}</div>
             </div>
           </div>
 
@@ -204,7 +206,7 @@ export default function Spending() {
             ) : (
               <div className="card divide-y divide-line">
                 {txns.map((t) => {
-                  const isSpend = t.type === 'stock_purchase'
+                  const isSpend = Number(t.amount) < 0
                   return (
                     <div key={t.id} className="flex items-center justify-between px-4 py-3">
                       <div className="min-w-0">

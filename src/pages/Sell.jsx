@@ -127,7 +127,26 @@ async function pushSaleToServer(business, saleData) {
     if (debtError) throw debtError
   }
 
-  return { sale, stockShortfalls }
+  // Cash sales put money back in hand straight away, so they flow back
+  // into the capital balance. Credit/installment sales don't — that money
+  // only lands in capital once it's actually collected (see the debt
+  // payment / installment payment recording in Customers.jsx).
+  let capitalBalanceAfter = null
+  if (!saleData.is_credit && Number(saleData.total) > 0) {
+    const { data: biz } = await supabase.from('businesses').select('capital_balance').eq('id', business.id).single()
+    capitalBalanceAfter = Number(biz?.capital_balance || 0) + Number(saleData.total)
+    await supabase.from('businesses').update({ capital_balance: capitalBalanceAfter }).eq('id', business.id)
+    await supabase.from('capital_transactions').insert({
+      business_id: business.id,
+      type: 'sale_income',
+      amount: saleData.total,
+      note: `Cash sale${saleData.queuedOffline ? ' (synced from offline)' : ''}${saleData.sale_date ? ' (backdated)' : ''}`,
+      staff_user_id: saleData.staff_user_id,
+      ...(saleData.sale_date ? { created_at: new Date(saleData.sale_date).toISOString() } : {}),
+    })
+  }
+
+  return { sale, stockShortfalls, capitalBalanceAfter }
 }
 
 // Lets the owner record a sale as having happened earlier — e.g. they
@@ -422,7 +441,7 @@ function CartDrawer({
 
 // ── Main component ──────────────────────────────────────────────────────────
 export default function Sell() {
-  const { business, activeStaff } = useAuth()
+  const { business, activeStaff, setBusiness } = useAuth()
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState([])
@@ -497,7 +516,10 @@ export default function Sell() {
     let synced = 0
     for (const entry of queue) {
       try {
-        const { stockShortfalls } = await pushSaleToServer(business, entry.saleData)
+        const { stockShortfalls, capitalBalanceAfter } = await pushSaleToServer(business, entry.saleData)
+        if (capitalBalanceAfter != null) {
+          setBusiness((prev) => (prev ? { ...prev, capital_balance: capitalBalanceAfter } : prev))
+        }
         removeFromQueue(entry.localId)
         synced++
         if (stockShortfalls.length > 0) {
@@ -677,7 +699,10 @@ export default function Sell() {
       setInstallmentAmount(''); setInstallmentFrequency('monthly'); setInstallmentFirstDue('')
     }
 
-    function onSuccess(shortfalls) {
+    function onSuccess(shortfalls, capitalBalanceAfter) {
+      if (capitalBalanceAfter != null) {
+        setBusiness((prev) => (prev ? { ...prev, capital_balance: capitalBalanceAfter } : prev))
+      }
       if (shortfalls.length > 0) {
         setMessage(`⚠ Sale done, but check stock: ${shortfalls.map((s) => s.name).join(', ')}.`)
       } else {
@@ -710,9 +735,9 @@ export default function Sell() {
     if (!navigator.onLine) { onOffline(); setBusy(false); return }
 
     try {
-      const { stockShortfalls, sale } = await pushSaleToServer(business, saleData)
+      const { stockShortfalls, sale, capitalBalanceAfter } = await pushSaleToServer(business, saleData)
       await createInstallmentPlan(sale?.id)
-      onSuccess(stockShortfalls)
+      onSuccess(stockShortfalls, capitalBalanceAfter)
     } catch {
       onOffline()
     } finally {
