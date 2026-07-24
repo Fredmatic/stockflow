@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import BackdateControl from '../components/BackdateControl'
 
 const RANGES = [
   { key: 'today', label: 'Today' },
@@ -39,6 +40,9 @@ export default function Expenses() {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [backdateAt, setBackdateAt] = useState('')
+  const [showBackdate, setShowBackdate] = useState(false)
+  const isOwner = activeStaff?.role === 'owner'
 
   useEffect(() => {
     if (!business) return
@@ -84,12 +88,14 @@ export default function Expenses() {
       return
     }
     setSaving(true)
+    const backdateISO = isOwner && backdateAt ? new Date(backdateAt).toISOString() : null
     const { error } = await supabase.from('expenses').insert({
       business_id: business.id,
       staff_user_id: activeStaff?.id || null,
       category: category.trim(),
       amount: Number(amount),
       note: note.trim() || null,
+      ...(backdateISO ? { created_at: backdateISO } : {}),
     })
     setSaving(false)
     if (error) {
@@ -99,6 +105,8 @@ export default function Expenses() {
     setCategory('')
     setAmount('')
     setNote('')
+    setBackdateAt('')
+    setShowBackdate(false)
     setMessage('Expense added.')
     setTimeout(() => setMessage(''), 3000)
     load()
@@ -166,6 +174,14 @@ export default function Expenses() {
           <span className="text-xs font-medium text-muted mb-1 block">Note (optional)</span>
           <input className="input" value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
+        {isOwner && (
+          <BackdateControl
+            show={showBackdate} onToggle={() => setShowBackdate((v) => !v)} value={backdateAt} onChange={setBackdateAt}
+            linkLabel="Forgot to log this earlier? Backdate this expense"
+            prompt="When was this expense actually paid?"
+            hint="This expense will be recorded with that date/time instead of now."
+          />
+        )}
         <button type="submit" disabled={saving} className="btn-primary w-full">
           {saving ? 'Saving…' : 'Add expense'}
         </button>

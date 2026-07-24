@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
+import BackdateControl from '../components/BackdateControl'
 import { enqueueSale, getQueue, removeFromQueue, markSyncFailed, getFailedSales, clearFailedSales, queueCount } from '../lib/offlineQueue'
 
 function lineId(item) {
@@ -148,41 +149,6 @@ async function pushSaleToServer(business, saleData) {
   }
 
   return { sale, stockShortfalls, capitalBalanceAfter }
-}
-
-// Lets the owner record a sale as having happened earlier — e.g. they
-// forgot to log yesterday's sale. Only rendered for owners; staff/cashiers
-// never see it, so every sale they record is timestamped "now" as usual.
-function BackdateControl({ show, onToggle, value, onChange }) {
-  const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-  return (
-    <div className="mb-4">
-      {!show ? (
-        <button
-          type="button"
-          onClick={onToggle}
-          className="text-xs text-muted underline decoration-dotted"
-        >
-          Forgot to log this earlier? Backdate this sale
-        </button>
-      ) : (
-        <div className="card p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted">When did this sale actually happen?</span>
-            <button type="button" onClick={() => { onToggle(); onChange('') }} className="text-xs text-muted">Cancel</button>
-          </div>
-          <input
-            type="datetime-local"
-            className="input font-mono text-sm"
-            max={nowLocal}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-          />
-          <p className="text-[11px] text-muted">This sale will be recorded with that date/time instead of now, and stock will still be deducted.</p>
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ── Cart Drawer (mobile only) ───────────────────────────────────────────────
@@ -376,7 +342,12 @@ function CartDrawer({
           </div>
 
           {isOwner && (
-            <BackdateControl show={showBackdate} onToggle={() => setShowBackdate((v) => !v)} value={backdateAt} onChange={setBackdateAt} />
+            <BackdateControl
+              show={showBackdate} onToggle={() => setShowBackdate((v) => !v)} value={backdateAt} onChange={setBackdateAt}
+              linkLabel="Forgot to log this earlier? Backdate this sale"
+              prompt="When did this sale actually happen?"
+              hint="This sale will be recorded with that date/time instead of now, and stock will still be deducted."
+            />
           )}
 
           {/* Total */}
@@ -1015,7 +986,12 @@ export default function Sell() {
           )}
 
           {isOwner && (
-            <BackdateControl show={showBackdate} onToggle={() => setShowBackdate((v) => !v)} value={backdateAt} onChange={setBackdateAt} />
+            <BackdateControl
+              show={showBackdate} onToggle={() => setShowBackdate((v) => !v)} value={backdateAt} onChange={setBackdateAt}
+              linkLabel="Forgot to log this earlier? Backdate this sale"
+              prompt="When did this sale actually happen?"
+              hint="This sale will be recorded with that date/time instead of now, and stock will still be deducted."
+            />
           )}
 
           <div className={`flex items-center justify-between px-1 ${canSeeProfit ? 'mb-1' : 'mb-4'}`}>

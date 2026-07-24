@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import BackdateControl from '../components/BackdateControl'
 
 function displayName(item) {
   return item.variant_name ? `${item.product_name} — ${item.variant_name}` : item.product_name
@@ -23,6 +24,9 @@ export default function StockIn() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [showHistory, setShowHistory] = useState(false)
+  const [backdateAt, setBackdateAt] = useState('')
+  const [showBackdate, setShowBackdate] = useState(false)
+  const isOwner = activeStaff?.role === 'owner'
 
   useEffect(() => {
     if (business) {
@@ -73,6 +77,7 @@ export default function StockIn() {
     e.preventDefault()
     if (!selected || !quantity) return
     setBusy(true)
+    const backdateISO = isOwner && backdateAt ? new Date(backdateAt).toISOString() : null
     await supabase.from('stock_movements').insert({
       product_id: selected.product_id,
       variant_id: selected.variant_id || null,
@@ -81,8 +86,9 @@ export default function StockIn() {
       quantity: Number(quantity),
       unit_cost: unitCost ? Number(unitCost) : null,
       supplier_id: supplierId || null,
-      note: note || null,
+      note: note ? (backdateISO ? `${note} (backdated)` : note) : (backdateISO ? 'Backdated restock' : null),
       staff_user_id: activeStaff?.id || null,
+      ...(backdateISO ? { created_at: backdateISO } : {}),
     })
 
     // If a cost was entered and differs from the product's current cost price, update it
@@ -106,8 +112,9 @@ export default function StockIn() {
         amount: -totalCost,
         product_id: selected.product_id,
         variant_id: selected.variant_id || null,
-        note: `Restock: ${quantity} x ${displayName(selected)}`,
+        note: `Restock: ${quantity} x ${displayName(selected)}${backdateISO ? ' (backdated)' : ''}`,
         staff_user_id: activeStaff?.id || null,
+        ...(backdateISO ? { created_at: backdateISO } : {}),
       })
       setBusiness({ ...business, capital_balance: newBalance })
     }
@@ -125,6 +132,8 @@ export default function StockIn() {
     setSupplierId('')
     setNote('')
     setSearch('')
+    setBackdateAt('')
+    setShowBackdate(false)
     setBusy(false)
     loadProducts()
     setTimeout(() => setMessage(''), 6000)
@@ -261,6 +270,15 @@ export default function StockIn() {
             <span className="text-xs font-medium text-muted mb-1 block">Note (optional)</span>
             <input className="input" placeholder="e.g. invoice number" value={note} onChange={(e) => setNote(e.target.value)} />
           </label>
+
+          {isOwner && (
+            <BackdateControl
+              show={showBackdate} onToggle={() => setShowBackdate((v) => !v)} value={backdateAt} onChange={setBackdateAt}
+              linkLabel="Forgot to log this earlier? Backdate this restock"
+              prompt="When did this restock actually happen?"
+              hint="This restock — and the capital spent on it — will be recorded with that date/time instead of now."
+            />
+          )}
 
           <button type="submit" disabled={busy} className="btn-primary w-full">
             {busy ? 'Saving…' : 'Add to stock'}
