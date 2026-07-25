@@ -28,7 +28,7 @@ export default function SplashScreen({ name, onDone }) {
     >
       <div className="font-display text-2xl font-semibold tracking-tight mb-2">StockTracer</div>
       <div className="text-white/80 text-sm text-center">
-        {name ? `${name} welcomes you to StockTracer` : 'Welcome to StockTracer'}
+        {name ? `Welcome back, ${name}, to StockTracer!` : 'Welcome back to StockTracer!'}
       </div>
     </div>
   )

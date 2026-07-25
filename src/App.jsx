@@ -31,7 +31,11 @@ function Gate({ children }) {
   const location = useLocation()
   const [splashDone, setSplashDone] = useState(() => sessionStorage.getItem('stocktracer_splash_shown') === '1')
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Loading…</div>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="font-display text-xl font-semibold text-brand-dark">Loading…</div>
+    </div>
+  )
 
   // If already logged in, don't show auth pages — go straight to app
   if (session && ['/login', '/signup'].includes(location.pathname)) {
@@ -43,7 +47,11 @@ function Gate({ children }) {
 
   // Protected area below — must be signed in
   if (!session) return <Navigate to="/" replace />
-  if (businessLoading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Starting up your business…</div>
+  if (businessLoading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="font-display text-xl font-semibold text-brand-dark">Welcome back! Preparing your dashboard…</div>
+    </div>
+  )
   // New signup — redirect to staff page to add first team member
   if (business && localStorage.getItem('stocktracer_new_account')) {
     localStorage.removeItem('stocktracer_new_account')
