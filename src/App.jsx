@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
@@ -21,12 +22,14 @@ import Expenses from './pages/Expenses'
 import Spending from './pages/Spending'
 import Reports from './pages/Reports'
 import Reminders from './pages/Reminders'
+import SplashScreen from './components/SplashScreen'
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/reset-password']
 
 function Gate({ children }) {
   const { session, business, businessLoading, businessError, activeStaff, loading, signOut } = useAuth()
   const location = useLocation()
+  const [splashDone, setSplashDone] = useState(() => sessionStorage.getItem('stocktracer_splash_shown') === '1')
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted text-sm">Loading…</div>
 
@@ -47,6 +50,19 @@ function Gate({ children }) {
     return <Navigate to="/staff" replace />
   }
   if (!business) return <NoBusinessScreen error={businessError} onSignOut={signOut} />
+
+  // One personal welcome per browser session, right as the app launches
+  if (!splashDone) {
+    return (
+      <SplashScreen
+        name={business.owner_name}
+        onDone={() => {
+          sessionStorage.setItem('stocktracer_splash_shown', '1')
+          setSplashDone(true)
+        }}
+      />
+    )
+  }
 
   // Trial / subscription check — expired businesses see the paywall
   const expired = business.subscription_status === 'expired' || daysLeft(business.trial_ends_at) === 0
