@@ -71,76 +71,77 @@ export default function Lenders() {
 
   return (
     <ProLock feature="People I Owe (lender tracking)">
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-xl font-semibold">People I Owe</h1>
-          <p className="text-muted text-sm">Personal & business loans, advances — separate from suppliers.</p>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="font-display text-xl font-semibold">People I Owe</h1>
+            <p className="text-muted text-sm">Personal & business loans, advances — separate from suppliers.</p>
+          </div>
+          <button onClick={() => setShowNew(true)} className="btn-primary">+ Add lender</button>
         </div>
-        <button onClick={() => setShowNew(true)} className="btn-primary">+ Add lender</button>
-      </div>
 
-      <div className="card px-4 py-4 flex items-center justify-between">
-        <div>
-          <div className="text-xs text-muted">Total you owe</div>
-          <div className="font-mono text-2xl font-semibold text-brick">UGX {totalOwed.toLocaleString()}</div>
+        <div className="card px-4 py-4 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-muted">Total you owe</div>
+            <div className="font-mono text-2xl font-semibold text-brick">UGX {totalOwed.toLocaleString()}</div>
+          </div>
+          <div className="text-right text-xs text-muted space-y-1">
+            <div>{lenderCount} lender{lenderCount === 1 ? '' : 's'} with a balance</div>
+            {overdueCount > 0 && (
+              <div className="text-brick font-medium">⚠ {overdueCount} overdue</div>
+            )}
+          </div>
         </div>
-        <div className="text-right text-xs text-muted space-y-1">
-          <div>{lenderCount} lender{lenderCount === 1 ? '' : 's'} with a balance</div>
-          {overdueCount > 0 && (
-            <div className="text-brick font-medium">⚠ {overdueCount} overdue</div>
-          )}
-        </div>
-      </div>
 
-      {loading ? (
-        <p className="text-muted text-sm">Loading…</p>
-      ) : lenders.length === 0 ? (
-        <p className="card px-4 py-8 text-center text-sm text-muted">
-          Nobody on record yet. Add someone who's lent you money or given you an advance.
-        </p>
-      ) : (
-        <div className="card divide-y divide-line">
-          {lenders.map((l) => (
-            <button
-              key={l.lender_id}
-              onClick={() => setSelected(l)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-paper"
-            >
-              <div className="space-y-1">
-                <div className="text-sm font-medium">{l.name}</div>
-                <div className="text-xs text-muted">{l.phone || 'No phone saved'}</div>
-                <DeadlineBadge lender={l} />
-              </div>
-              <div className="text-right">
-                <div className={`font-mono text-sm ${Number(l.balance) > 0 ? 'text-brick' : 'text-brand-dark'}`}>
-                  UGX {Number(l.balance).toLocaleString()}
+        {loading ? (
+          <p className="text-muted text-sm">Loading…</p>
+        ) : lenders.length === 0 ? (
+          <p className="card px-4 py-8 text-center text-sm text-muted">
+            Nobody on record yet. Add someone who's lent you money or given you an advance.
+          </p>
+        ) : (
+          <div className="card divide-y divide-line">
+            {lenders.map((l) => (
+              <button
+                key={l.lender_id}
+                onClick={() => setSelected(l)}
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-paper"
+              >
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">{l.name}</div>
+                  <div className="text-xs text-muted">{l.phone || 'No phone saved'}</div>
+                  <DeadlineBadge lender={l} />
                 </div>
-                <div className="text-xs text-muted">{Number(l.balance) > 0 ? 'you owe' : 'settled'}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+                <div className="text-right">
+                  <div className={`font-mono text-sm ${Number(l.balance) > 0 ? 'text-brick' : 'text-brand-dark'}`}>
+                    UGX {Number(l.balance).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-muted">{Number(l.balance) > 0 ? 'you owe' : 'settled'}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
 
-      {showNew && (
-        <NewLenderForm
-          business={business}
-          onClose={() => setShowNew(false)}
-          onSaved={() => { setShowNew(false); load() }}
-        />
-      )}
+        {showNew && (
+          <NewLenderForm
+            business={business}
+            onClose={() => setShowNew(false)}
+            onSaved={() => { setShowNew(false); load() }}
+          />
+        )}
 
-      {selected && (
-        <LenderDetail
-          business={business}
-          activeStaff={activeStaff}
-          lender={selected}
-          onClose={() => setSelected(null)}
-          onChanged={() => { load() }}
-        />
-      )}
-    </div>
+        {selected && (
+          <LenderDetail
+            business={business}
+            activeStaff={activeStaff}
+            lender={selected}
+            onClose={() => setSelected(null)}
+            onChanged={() => { load() }}
+          />
+        )}
+      </div>
+    </ProLock>
   )
 }
 
@@ -481,6 +482,5 @@ function LenderDetail({ business, activeStaff, lender, onClose, onChanged }) {
         )}
       </div>
     </div>
-    </ProLock>
   )
 }
