@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import ProLock from '../components/ProLock'
 
 const PERIODS = [
     { key: 'today', label: 'Today' },
@@ -251,102 +252,104 @@ export default function Reports() {
     const margin = data.totalRevenue > 0 ? ((data.grossProfit / data.totalRevenue) * 100).toFixed(1) : '0.0'
 
     return (
-        <div className="reports-page">
-            <style>{CSS}</style>
-            <div className="reports-header no-print">
-                <div>
-                    <h1 className="font-display text-xl font-semibold">Reports</h1>
-                    <p className="text-sm text-muted mt-0.5">Business performance summary</p>
-                </div>
-                <div className="reports-actions">
-                    {period === 'custom' && (
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <input type="date" className="input text-sm py-1 w-auto"
-                                value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-                                max={customTo || new Date().toISOString().slice(0, 10)} />
-                            <span className="text-muted text-sm">to</span>
-                            <input type="date" className="input text-sm py-1 w-auto"
-                                value={customTo} onChange={e => setCustomTo(e.target.value)}
-                                min={customFrom} max={new Date().toISOString().slice(0, 10)} />
-                        </div>
-                    )}
-                    <div className="period-tabs">
-                        {PERIODS.map(p => (
-                            <button key={p.key} onClick={() => setPeriod(p.key)} className={`period-tab ${period === p.key ? 'period-tab--active' : ''}`}>{p.label}</button>
-                        ))}
+        <ProLock feature="Full profit reports">
+            <div className="reports-page">
+                <style>{CSS}</style>
+                <div className="reports-header no-print">
+                    <div>
+                        <h1 className="font-display text-xl font-semibold">Reports</h1>
+                        <p className="text-sm text-muted mt-0.5">Business performance summary</p>
                     </div>
-                    <button onClick={() => window.print()} className="btn-secondary no-print">🖨 Print</button>
-                    {!loading && <button onClick={() => exportReportCSV(data, period, business?.name)} className="btn-secondary no-print">⬇ Export CSV</button>}
-                </div>
-            </div>
-
-            {loading ? <div className="p-16 text-center text-muted text-sm">Loading report…</div> : (
-                <div ref={printRef}>
-                    <div className="print-only mb-6"><div className="text-xl font-bold">{business?.name} — Business Report</div><div className="text-sm text-muted">{data.periodLabel}</div></div>
-
-                    <section className="report-section">
-                        <h2 className="report-section-title">Sales Summary <span className="report-period-tag no-print">{data.periodLabel}</span></h2>
-                        <div className="report-grid-4">
-                            <div className="report-stat"><div className="report-stat-label">Total Revenue</div><div className="report-stat-value text-brand">{fmt(data.totalRevenue)}</div></div>
-                            <div className="report-stat"><div className="report-stat-label">Gross Profit</div><div className="report-stat-value text-brand">{fmt(data.grossProfit)}</div><div className="report-stat-sub">Margin {margin}%</div></div>
-                            <div className="report-stat"><div className="report-stat-label">Transactions</div><div className="report-stat-value">{data.salesCount}</div>{data.refundsCount > 0 && <div className="report-stat-sub text-brick">{data.refundsCount} refund{data.refundsCount > 1 ? 's' : ''}</div>}</div>
-                            <div className="report-stat"><div className="report-stat-label">Cost of Goods</div><div className="report-stat-value">{fmt(data.totalCost)}</div></div>
-                        </div>
-                    </section>
-
-                    <section className="report-section">
-                        <h2 className="report-section-title">Revenue Over Time</h2>
-                        <LineChart points={data.revenuePoints} />
-                    </section>
-
-                    <section className="report-section">
-                        <h2 className="report-section-title">Sales Count Per Day</h2>
-                        <BarChart points={data.salesCountPoints} />
-                    </section>
-
-                    <section className="report-section">
-                        <h2 className="report-section-title">Profit After Expenses</h2>
-                        <div className="report-grid-3">
-                            <div className="report-stat"><div className="report-stat-label">Gross Profit</div><div className="report-stat-value">{fmt(data.grossProfit)}</div></div>
-                            <div className="report-stat"><div className="report-stat-label">Total Expenses</div><div className="report-stat-value text-brick">− {fmt(data.totalExpenses)}</div></div>
-                            <div className={`report-stat ${data.netProfit >= 0 ? 'report-stat--success' : 'report-stat--danger'}`}>
-                                <div className="report-stat-label">Net Profit</div>
-                                <div className={`report-stat-value ${data.netProfit >= 0 ? 'text-brand' : 'text-brick'}`}>{fmt(data.netProfit)}</div>
-                            </div>
-                        </div>
-                        {data.expensesByCategory.length > 0 && (
-                            <div className="report-table-wrap mt-4">
-                                <table className="report-table">
-                                    <thead><tr><th>Expense Category</th><th className="ta-right">Amount</th><th className="ta-right">%</th></tr></thead>
-                                    <tbody>{data.expensesByCategory.map(({ cat, amt }) => (
-                                        <tr key={cat}><td>{cat}</td><td className="ta-right">{fmt(amt)}</td><td className="ta-right text-muted">{data.totalExpenses > 0 ? ((amt / data.totalExpenses) * 100).toFixed(1) : 0}%</td></tr>
-                                    ))}</tbody>
-                                </table>
+                    <div className="reports-actions">
+                        {period === 'custom' && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <input type="date" className="input text-sm py-1 w-auto"
+                                    value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                                    max={customTo || new Date().toISOString().slice(0, 10)} />
+                                <span className="text-muted text-sm">to</span>
+                                <input type="date" className="input text-sm py-1 w-auto"
+                                    value={customTo} onChange={e => setCustomTo(e.target.value)}
+                                    min={customFrom} max={new Date().toISOString().slice(0, 10)} />
                             </div>
                         )}
-                    </section>
-
-                    {data.topProducts.length > 0 && (
-                        <section className="report-section">
-                            <h2 className="report-section-title">Top Products by Revenue</h2>
-                            <HorizontalBarChart items={data.topProducts.map(p => ({ name: p.name, value: p.revenue }))} />
-                        </section>
-                    )}
-
-                    <section className="report-section">
-                        <h2 className="report-section-title">Stock Levels</h2>
-                        <div className="report-grid-4">
-                            <div className="report-stat"><div className="report-stat-label">In Stock</div><div className="report-stat-value text-brand">{data.stockSummary.inStock}</div><div className="report-stat-sub">products</div></div>
-                            <div className="report-stat"><div className="report-stat-label">Low Stock</div><div className="report-stat-value text-amber">{data.stockSummary.lowStock}</div><div className="report-stat-sub">need reorder</div></div>
-                            <div className="report-stat"><div className="report-stat-label">Out of Stock</div><div className="report-stat-value text-brick">{data.stockSummary.outOfStock}</div><div className="report-stat-sub">unavailable</div></div>
-                            <div className="report-stat"><div className="report-stat-label">Stock Value</div><div className="report-stat-value">{fmt(data.stockSummary.totalValue)}</div><div className="report-stat-sub">at cost price</div></div>
+                        <div className="period-tabs">
+                            {PERIODS.map(p => (
+                                <button key={p.key} onClick={() => setPeriod(p.key)} className={`period-tab ${period === p.key ? 'period-tab--active' : ''}`}>{p.label}</button>
+                            ))}
                         </div>
-                    </section>
-
-                    <div className="print-only mt-8 pt-4 border-t border-line text-xs text-muted">Generated by StockTracer · {new Date().toLocaleString('en-UG')}</div>
+                        <button onClick={() => window.print()} className="btn-secondary no-print">🖨 Print</button>
+                        {!loading && <button onClick={() => exportReportCSV(data, period, business?.name)} className="btn-secondary no-print">⬇ Export CSV</button>}
+                    </div>
                 </div>
-            )}
-        </div>
+
+                {loading ? <div className="p-16 text-center text-muted text-sm">Loading report…</div> : (
+                    <div ref={printRef}>
+                        <div className="print-only mb-6"><div className="text-xl font-bold">{business?.name} — Business Report</div><div className="text-sm text-muted">{data.periodLabel}</div></div>
+
+                        <section className="report-section">
+                            <h2 className="report-section-title">Sales Summary <span className="report-period-tag no-print">{data.periodLabel}</span></h2>
+                            <div className="report-grid-4">
+                                <div className="report-stat"><div className="report-stat-label">Total Revenue</div><div className="report-stat-value text-brand">{fmt(data.totalRevenue)}</div></div>
+                                <div className="report-stat"><div className="report-stat-label">Gross Profit</div><div className="report-stat-value text-brand">{fmt(data.grossProfit)}</div><div className="report-stat-sub">Margin {margin}%</div></div>
+                                <div className="report-stat"><div className="report-stat-label">Transactions</div><div className="report-stat-value">{data.salesCount}</div>{data.refundsCount > 0 && <div className="report-stat-sub text-brick">{data.refundsCount} refund{data.refundsCount > 1 ? 's' : ''}</div>}</div>
+                                <div className="report-stat"><div className="report-stat-label">Cost of Goods</div><div className="report-stat-value">{fmt(data.totalCost)}</div></div>
+                            </div>
+                        </section>
+
+                        <section className="report-section">
+                            <h2 className="report-section-title">Revenue Over Time</h2>
+                            <LineChart points={data.revenuePoints} />
+                        </section>
+
+                        <section className="report-section">
+                            <h2 className="report-section-title">Sales Count Per Day</h2>
+                            <BarChart points={data.salesCountPoints} />
+                        </section>
+
+                        <section className="report-section">
+                            <h2 className="report-section-title">Profit After Expenses</h2>
+                            <div className="report-grid-3">
+                                <div className="report-stat"><div className="report-stat-label">Gross Profit</div><div className="report-stat-value">{fmt(data.grossProfit)}</div></div>
+                                <div className="report-stat"><div className="report-stat-label">Total Expenses</div><div className="report-stat-value text-brick">− {fmt(data.totalExpenses)}</div></div>
+                                <div className={`report-stat ${data.netProfit >= 0 ? 'report-stat--success' : 'report-stat--danger'}`}>
+                                    <div className="report-stat-label">Net Profit</div>
+                                    <div className={`report-stat-value ${data.netProfit >= 0 ? 'text-brand' : 'text-brick'}`}>{fmt(data.netProfit)}</div>
+                                </div>
+                            </div>
+                            {data.expensesByCategory.length > 0 && (
+                                <div className="report-table-wrap mt-4">
+                                    <table className="report-table">
+                                        <thead><tr><th>Expense Category</th><th className="ta-right">Amount</th><th className="ta-right">%</th></tr></thead>
+                                        <tbody>{data.expensesByCategory.map(({ cat, amt }) => (
+                                            <tr key={cat}><td>{cat}</td><td className="ta-right">{fmt(amt)}</td><td className="ta-right text-muted">{data.totalExpenses > 0 ? ((amt / data.totalExpenses) * 100).toFixed(1) : 0}%</td></tr>
+                                        ))}</tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </section>
+
+                        {data.topProducts.length > 0 && (
+                            <section className="report-section">
+                                <h2 className="report-section-title">Top Products by Revenue</h2>
+                                <HorizontalBarChart items={data.topProducts.map(p => ({ name: p.name, value: p.revenue }))} />
+                            </section>
+                        )}
+
+                        <section className="report-section">
+                            <h2 className="report-section-title">Stock Levels</h2>
+                            <div className="report-grid-4">
+                                <div className="report-stat"><div className="report-stat-label">In Stock</div><div className="report-stat-value text-brand">{data.stockSummary.inStock}</div><div className="report-stat-sub">products</div></div>
+                                <div className="report-stat"><div className="report-stat-label">Low Stock</div><div className="report-stat-value text-amber">{data.stockSummary.lowStock}</div><div className="report-stat-sub">need reorder</div></div>
+                                <div className="report-stat"><div className="report-stat-label">Out of Stock</div><div className="report-stat-value text-brick">{data.stockSummary.outOfStock}</div><div className="report-stat-sub">unavailable</div></div>
+                                <div className="report-stat"><div className="report-stat-label">Stock Value</div><div className="report-stat-value">{fmt(data.stockSummary.totalValue)}</div><div className="report-stat-sub">at cost price</div></div>
+                            </div>
+                        </section>
+
+                        <div className="print-only mt-8 pt-4 border-t border-line text-xs text-muted">Generated by StockTracer · {new Date().toLocaleString('en-UG')}</div>
+                    </div>
+                )}
+            </div>
+        </ProLock>
     )
 }
 

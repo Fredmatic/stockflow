@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import ProLock from '../components/ProLock'
 
 // Returns { days, overdue } relative to today
 function getDeadlineStatus(dueDateStr) {
@@ -69,6 +70,7 @@ export default function Lenders() {
   }).length
 
   return (
+    <ProLock feature="People I Owe (lender tracking)">
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -479,5 +481,6 @@ function LenderDetail({ business, activeStaff, lender, onClose, onChanged }) {
         )}
       </div>
     </div>
+    </ProLock>
   )
 }

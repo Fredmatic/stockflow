@@ -29,26 +29,24 @@ export default function ProLock({ feature, children }) {
     const waText = `Hi, I'm on the Starter plan for "${business.name}" and I'd like to upgrade to Pro to unlock ${feature}.`
 
     return (
-        <div className="relative">
+        <div>
+            <div className="mb-6 bg-paper-raised border border-line rounded-lg shadow-md p-6 max-w-sm mx-auto text-center">
+                <div className="text-2xl mb-2">🔒</div>
+                <p className="font-display font-semibold text-sm mb-1">{feature} is a Pro feature</p>
+                <p className="text-xs text-muted mb-4">
+                    Upgrade from Starter to Pro to unlock this for {business.name}.
+                </p>
+                <a
+                    href={`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(waText)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-primary text-sm inline-block w-full"
+                >
+                    Upgrade to Pro
+                </a>
+            </div>
             <div aria-hidden="true" className="pointer-events-none select-none opacity-40 blur-[1.5px]">
                 {children}
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center bg-paper/60 rounded-lg">
-                <div className="bg-paper-raised border border-line rounded-lg shadow-lg p-6 max-w-xs text-center mx-4">
-                    <div className="text-2xl mb-2">🔒</div>
-                    <p className="font-display font-semibold text-sm mb-1">{feature} is a Pro feature</p>
-                    <p className="text-xs text-muted mb-4">
-                        Upgrade from Starter to Pro to unlock this for {business.name}.
-                    </p>
-                    <a
-                        href={`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(waText)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-primary text-sm inline-block w-full"
-                    >
-                        Upgrade to Pro
-                    </a>
-                </div>
             </div>
         </div>
     )
