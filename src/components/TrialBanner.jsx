@@ -1,6 +1,6 @@
 import { daysLeft } from '../pages/TrialExpired'
 
-const WHATSAPP_NUMBER = '256708401692'
+const WHATSAPP_NUMBER = '256740193837'
 
 export default function TrialBanner({ business }) {
   if (!business) return null
@@ -15,11 +15,10 @@ export default function TrialBanner({ business }) {
   )
 
   return (
-    <div className={`mb-4 flex items-center gap-3 rounded-md px-4 py-2.5 text-sm ${
-      isUrgent
+    <div className={`mb-4 flex items-center gap-3 rounded-md px-4 py-2.5 text-sm ${isUrgent
         ? 'bg-brick/10 border border-brick/30 text-brick'
         : 'bg-amber-light border border-amber/30 text-amber'
-    }`}>
+      }`}>
       <span>{isUrgent ? '⚠' : '⏳'}</span>
       <span className="flex-1">
         {isUrgent

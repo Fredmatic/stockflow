@@ -2,7 +2,7 @@
 // Gives them a clear call-to-action to pay via WhatsApp/MTN Mobile Money.
 
 const WHATSAPP_NUMBER = '256740193837' // Fred's number — update if needed
-const MTN_PAYBILL = '256708401692'     // update to actual MTN Mobile Money number
+const MTN_PAYBILL = '256740193837'     // update to actual MTN Mobile Money number
 
 function daysLeft(trialEndsAt) {
   if (!trialEndsAt) return 0
@@ -75,7 +75,7 @@ export default function TrialExpiredScreen({ business, onSignOut }) {
             <div className="font-medium mb-1">MTN Mobile Money</div>
             <div className="text-muted text-xs space-y-1">
               <div>Send to: <span className="font-mono font-semibold text-ink">{MTN_PAYBILL}</span></div>
-              <div>Name: <span className="font-semibold text-ink">Fred Mugisha</span></div>
+              <div>Name: <span className="font-semibold text-ink">Fred Ssaazi</span></div>
               <div className="pt-1 text-brand-dark">Then WhatsApp us your payment screenshot to activate →</div>
             </div>
           </div>
