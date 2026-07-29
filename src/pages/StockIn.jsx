@@ -28,12 +28,114 @@ export default function StockIn() {
   const [showBackdate, setShowBackdate] = useState(false)
   const isOwner = activeStaff?.role === 'owner'
 
+  const [lastRestock, setLastRestock] = useState(null)
+  const [editingRestock, setEditingRestock] = useState(false)
+  const [editQty, setEditQty] = useState('')
+  const [editCost, setEditCost] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
+  const [editError, setEditError] = useState('')
+
   useEffect(() => {
     if (business) {
       loadProducts()
       loadSuppliers()
+      loadLastRestock()
     }
   }, [business])
+
+  async function loadLastRestock() {
+    const { data } = await supabase
+      .from('stock_movements')
+      .select('id, product_id, variant_id, quantity, unit_cost, created_at, products(name), product_variants(name), capital_transactions(id, amount)')
+      .eq('business_id', business.id)
+      .eq('type', 'restock')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    setLastRestock(data || null)
+  }
+
+  function restockLabel(r) {
+    if (!r) return ''
+    return r.product_variants?.name ? `${r.products?.name} — ${r.product_variants.name}` : (r.products?.name || 'Deleted product')
+  }
+
+  function startEditRestock() {
+    if (!lastRestock) return
+    setEditQty(String(lastRestock.quantity))
+    setEditCost(lastRestock.unit_cost != null ? String(lastRestock.unit_cost) : '')
+    setEditError('')
+    setEditingRestock(true)
+  }
+
+  async function saveRestockEdit() {
+    if (!lastRestock || !editQty || Number(editQty) <= 0) {
+      setEditError('Enter a valid quantity.')
+      return
+    }
+    setEditBusy(true)
+    setEditError('')
+    try {
+      const newQty = Number(editQty)
+      const newCost = editCost ? Number(editCost) : 0
+      const oldQty = Number(lastRestock.quantity)
+      const oldCost = Number(lastRestock.unit_cost) || 0
+      const oldTotal = oldQty * oldCost
+      const newTotal = newQty * newCost
+
+      // 1. Correct the stock movement itself (this also fixes on-hand stock,
+      // since quantity_on_hand is a live sum of stock_movements).
+      const { error: smErr } = await supabase
+        .from('stock_movements')
+        .update({ quantity: newQty, unit_cost: newCost || null })
+        .eq('id', lastRestock.id)
+      if (smErr) throw smErr
+
+      // 2. If a cost is set now, make sure the product's cost_price reflects it.
+      if (newCost > 0) {
+        const table = lastRestock.variant_id ? 'product_variants' : 'products'
+        const idField = lastRestock.variant_id || lastRestock.product_id
+        await supabase.from(table).update({ cost_price: newCost }).eq('id', idField)
+      }
+
+      // 3. Reconcile capital: add back what was deducted before, deduct what
+      // should actually have been spent — net effect is the exact delta.
+      const existingTxn = lastRestock.capital_transactions?.[0]
+      const delta = oldTotal - newTotal
+      if (delta !== 0 || (!existingTxn && newTotal > 0)) {
+        const newBalance = Number(business.capital_balance || 0) + delta
+        await supabase.from('businesses').update({ capital_balance: newBalance }).eq('id', business.id)
+        setBusiness({ ...business, capital_balance: newBalance })
+
+        if (existingTxn && newTotal > 0) {
+          await supabase.from('capital_transactions')
+            .update({ amount: -newTotal, note: `Restock (corrected): ${newQty} x ${restockLabel(lastRestock)}` })
+            .eq('id', existingTxn.id)
+        } else if (existingTxn && newTotal <= 0) {
+          // Cost was removed entirely on the edit — this was never really a purchase.
+          await supabase.from('capital_transactions').delete().eq('id', existingTxn.id)
+        } else if (!existingTxn && newTotal > 0) {
+          await supabase.from('capital_transactions').insert({
+            business_id: business.id,
+            type: 'stock_purchase',
+            amount: -newTotal,
+            product_id: lastRestock.product_id,
+            variant_id: lastRestock.variant_id || null,
+            note: `Restock (corrected): ${newQty} x ${restockLabel(lastRestock)}`,
+            staff_user_id: activeStaff?.id || null,
+            stock_movement_id: lastRestock.id,
+          })
+        }
+      }
+
+      setEditingRestock(false)
+      await Promise.all([loadProducts(), loadLastRestock()])
+    } catch (err) {
+      setEditError(err.message || 'Could not save the correction.')
+    } finally {
+      setEditBusy(false)
+    }
+  }
 
   async function loadProducts() {
     const { data } = await supabase
@@ -78,7 +180,7 @@ export default function StockIn() {
     if (!selected || !quantity) return
     setBusy(true)
     const backdateISO = isOwner && backdateAt ? new Date(backdateAt).toISOString() : null
-    await supabase.from('stock_movements').insert({
+    const { data: movement } = await supabase.from('stock_movements').insert({
       product_id: selected.product_id,
       variant_id: selected.variant_id || null,
       business_id: business.id,
@@ -89,7 +191,7 @@ export default function StockIn() {
       note: note ? (backdateISO ? `${note} (backdated)` : note) : (backdateISO ? 'Backdated restock' : null),
       staff_user_id: activeStaff?.id || null,
       ...(backdateISO ? { created_at: backdateISO } : {}),
-    })
+    }).select().single()
 
     // If a cost was entered and differs from the product's current cost price, update it
     if (unitCost && Number(unitCost) > 0) {
@@ -114,6 +216,7 @@ export default function StockIn() {
         variant_id: selected.variant_id || null,
         note: `Restock: ${quantity} x ${displayName(selected)}${backdateISO ? ' (backdated)' : ''}`,
         staff_user_id: activeStaff?.id || null,
+        stock_movement_id: movement?.id || null,
         ...(backdateISO ? { created_at: backdateISO } : {}),
       })
       setBusiness({ ...business, capital_balance: newBalance })
@@ -136,6 +239,7 @@ export default function StockIn() {
     setShowBackdate(false)
     setBusy(false)
     loadProducts()
+    loadLastRestock()
     setTimeout(() => setMessage(''), 6000)
   }
 
@@ -170,6 +274,49 @@ export default function StockIn() {
       )}
 
       {message && <p className="text-sm text-brand-dark bg-brand-light rounded-md px-3 py-2">{message}</p>}
+
+      {lastRestock && (
+        <div className="card p-3 text-sm">
+          {!editingRestock ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-xs text-muted mb-0.5">Last restock</div>
+                <div className="truncate">
+                  {lastRestock.quantity} x {restockLabel(lastRestock)}
+                  {lastRestock.unit_cost ? ` · UGX ${Number(lastRestock.unit_cost).toLocaleString()}/unit` : ''}
+                </div>
+              </div>
+              {isOwner && (
+                <button onClick={startEditRestock} className="text-xs text-brand-dark font-medium whitespace-nowrap">
+                  Fix mistake →
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs text-muted">Correcting: {restockLabel(lastRestock)}</div>
+              <div className="flex gap-2">
+                <label className="block flex-1">
+                  <span className="text-xs font-medium text-muted mb-1 block">Quantity</span>
+                  <input type="number" min="1" className="input font-mono" value={editQty} onChange={(e) => setEditQty(e.target.value)} />
+                </label>
+                <label className="block flex-1">
+                  <span className="text-xs font-medium text-muted mb-1 block">Cost/unit</span>
+                  <input type="number" min="0" className="input font-mono" value={editCost} onChange={(e) => setEditCost(e.target.value)} />
+                </label>
+              </div>
+              {editError && <p className="text-xs text-brick">{editError}</p>}
+              <p className="text-xs text-muted">This corrects the stock quantity, the product's cost price, and your capital balance to match.</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setEditingRestock(false)} className="btn-secondary flex-1 text-sm">Cancel</button>
+                <button type="button" onClick={saveRestockEdit} disabled={editBusy} className="btn-primary flex-1 text-sm">
+                  {editBusy ? 'Saving…' : 'Save correction'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {!selected ? (
         <div>

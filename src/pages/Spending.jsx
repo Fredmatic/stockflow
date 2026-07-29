@@ -44,6 +44,7 @@ function txnLabel(t) {
   }
   if (t.type === 'sale_income') return t.note || 'Cash sale'
   if (t.type === 'debt_payment') return t.note || 'Payment received'
+  if (t.type === 'adjustment') return t.note ? `Manual correction · ${t.note}` : 'Manual correction'
   return t.note || 'Adjustment'
 }
 
@@ -54,6 +55,7 @@ export default function Spending() {
   const [loading, setLoading] = useState(true)
 
   const [showTopUp, setShowTopUp] = useState(false)
+  const [topUpDirection, setTopUpDirection] = useState('add')
   const [topUpAmount, setTopUpAmount] = useState('')
   const [topUpNote, setTopUpNote] = useState('')
   const [topUpBusy, setTopUpBusy] = useState(false)
@@ -94,23 +96,25 @@ export default function Spending() {
     e.preventDefault()
     if (!topUpAmount || Number(topUpAmount) <= 0) return
     setTopUpBusy(true)
-    const amt = Number(topUpAmount)
+    const isRemove = topUpDirection === 'remove'
+    const amt = Number(topUpAmount) * (isRemove ? -1 : 1)
     const newBalance = Number(business.capital_balance || 0) + amt
 
     const { error } = await supabase.from('businesses').update({ capital_balance: newBalance }).eq('id', business.id)
     if (!error) {
       await supabase.from('capital_transactions').insert({
         business_id: business.id,
-        type: 'topup',
+        type: isRemove ? 'adjustment' : 'topup',
         amount: amt,
         note: topUpNote.trim() || null,
         staff_user_id: activeStaff?.id || null,
       })
       setBusiness({ ...business, capital_balance: newBalance })
-      setMessage(`Added UGX ${amt.toLocaleString()} to your capital balance.`)
+      setMessage(`${isRemove ? 'Removed' : 'Added'} UGX ${Number(topUpAmount).toLocaleString()} ${isRemove ? 'from' : 'to'} your capital balance.`)
       setTimeout(() => setMessage(''), 4000)
       setTopUpAmount('')
       setTopUpNote('')
+      setTopUpDirection('add')
       setShowTopUp(false)
       load()
     }
@@ -138,12 +142,22 @@ export default function Spending() {
 
         {!showTopUp ? (
           <button onClick={() => setShowTopUp(true)} className="btn-primary w-full mt-3 text-sm">
-            + Top up capital
+            + Top up or correct capital
           </button>
         ) : (
           <form onSubmit={handleTopUp} className="mt-3 space-y-2 border-t border-line pt-3">
+            <div className="flex gap-1 bg-paper rounded-md p-1 border border-line">
+              {[['add', 'Add funds'], ['remove', 'Remove / correct']].map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setTopUpDirection(key)}
+                  className={`flex-1 text-xs py-1.5 rounded font-medium transition-colors ${topUpDirection === key ? 'bg-paper-raised shadow-sm text-ink border border-line' : 'text-muted'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <label className="block">
-              <span className="text-xs font-medium text-muted mb-1 block">Amount to add (UGX)</span>
+              <span className="text-xs font-medium text-muted mb-1 block">
+                Amount to {topUpDirection === 'remove' ? 'remove' : 'add'} (UGX)
+              </span>
               <input
                 required autoFocus type="number" min="1" className="input font-mono"
                 placeholder="e.g. 500000" value={topUpAmount}
@@ -152,13 +166,13 @@ export default function Spending() {
             </label>
             <label className="block">
               <span className="text-xs font-medium text-muted mb-1 block">Note (optional)</span>
-              <input className="input" placeholder="e.g. from personal savings" value={topUpNote}
+              <input className="input" placeholder={topUpDirection === 'remove' ? 'e.g. deleted product, unsold stock' : 'e.g. from personal savings'} value={topUpNote}
                 onChange={(e) => setTopUpNote(e.target.value)} />
             </label>
             <div className="flex gap-2">
-              <button type="button" onClick={() => setShowTopUp(false)} className="btn-secondary flex-1 text-sm">Cancel</button>
+              <button type="button" onClick={() => { setShowTopUp(false); setTopUpDirection('add') }} className="btn-secondary flex-1 text-sm">Cancel</button>
               <button type="submit" disabled={topUpBusy} className="btn-primary flex-1 text-sm">
-                {topUpBusy ? 'Saving…' : 'Add funds'}
+                {topUpBusy ? 'Saving…' : topUpDirection === 'remove' ? 'Remove funds' : 'Add funds'}
               </button>
             </div>
           </form>
