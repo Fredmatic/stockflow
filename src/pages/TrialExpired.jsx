@@ -35,7 +35,7 @@ export default function TrialExpiredScreen({ business, onSignOut }) {
           <div className="bg-paper-raised border border-line rounded-lg p-4">
             <div className="flex justify-between items-center mb-1">
               <span className="font-display font-semibold text-sm">Starter</span>
-              <span className="font-mono font-semibold text-brand-dark">UGX 30,000<span className="text-xs text-muted font-normal">/mo</span></span>
+              <span className="font-mono font-semibold text-brand-dark">UGX 15,000<span className="text-xs text-muted font-normal">/mo</span></span>
             </div>
             <ul className="text-xs text-muted space-y-1">
               <li>✓ Up to 3 staff</li>
@@ -47,7 +47,7 @@ export default function TrialExpiredScreen({ business, onSignOut }) {
             <div className="absolute -top-2 left-4 text-xs bg-white text-brand-dark font-semibold rounded-full px-2 py-0.5">Most popular</div>
             <div className="flex justify-between items-center mb-1">
               <span className="font-display font-semibold text-sm">Pro</span>
-              <span className="font-mono font-semibold">UGX 80,000<span className="text-xs opacity-70 font-normal">/mo</span></span>
+              <span className="font-mono font-semibold">UGX 30,000<span className="text-xs opacity-70 font-normal">/mo</span></span>
             </div>
             <ul className="text-xs opacity-80 space-y-1">
               <li>✓ Unlimited staff & products</li>
