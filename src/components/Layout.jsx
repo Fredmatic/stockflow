@@ -18,6 +18,7 @@ const NAV_ITEMS = [
     { to: '/products', label: 'Products', icon: '▤' },
     { to: '/stock-in', label: 'Stock In', icon: '↓' },
     { to: '/sell', label: 'Sell', icon: '↑' },
+    { to: '/services', label: 'Customer Service', icon: '✂' },
     { to: '/sales', label: 'Sales', icon: '◫' },
     { to: '/customers', label: 'Customers', icon: '⊙' },
     { to: '/lenders', label: 'People I Owe', icon: '◐' },

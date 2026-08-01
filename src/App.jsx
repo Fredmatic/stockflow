@@ -16,6 +16,7 @@ import StockIn from './pages/StockIn'
 import Sell from './pages/Sell'
 import Sales from './pages/Sales'
 import Customers from './pages/Customers'
+import Services from './pages/Services'
 import Lenders from './pages/Lenders'
 import Staff from './pages/Staff'
 import Expenses from './pages/Expenses'
@@ -138,6 +139,7 @@ export default function App() {
                 <Route path="/sell" element={<Restricted path="/sell"><Sell /></Restricted>} />
                 <Route path="/sales" element={<Restricted path="/sales"><Sales /></Restricted>} />
                 <Route path="/customers" element={<Restricted path="/customers"><Customers /></Restricted>} />
+                <Route path="/services" element={<Restricted path="/services"><Services /></Restricted>} />
                 <Route path="/lenders" element={<Restricted path="/lenders"><Lenders /></Restricted>} />
                 <Route path="/expenses" element={<Restricted path="/expenses"><Expenses /></Restricted>} />
                 <Route path="/spending" element={<Restricted path="/spending"><Spending /></Restricted>} />

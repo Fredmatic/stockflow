@@ -8,6 +8,7 @@ const ROUTE_LABELS = {
   '/products': 'Products',
   '/stock-in': 'Stock In',
   '/sales': 'Sales',
+  '/services': 'Customer Service',
   '/customers': 'Customers',
   '/expenses': 'Expenses',
   '/staff': 'Staff',

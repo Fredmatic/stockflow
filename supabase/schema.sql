@@ -238,6 +238,33 @@ create index on lender_transactions (lender_id, created_at desc);
 
 create index on lender_transactions (business_id);
 
+-- A single walk-in service performed for a customer (barbershop/salon
+-- style businesses): who did it, what it cost the shop (supplies +
+-- staff commission), and what's left as profit. customer_name/
+-- customer_phone are snapshots so history reads correctly even if the
+-- linked customer is later renamed or removed.
+create table service_tickets (
+    id uuid primary key default gen_random_uuid (),
+    business_id uuid not null references businesses (id) on delete cascade,
+    staff_user_id uuid references staff_users (id) on delete set null,
+    customer_id uuid references customers (id) on delete set null,
+    customer_name text not null,
+    customer_phone text,
+    service_name text not null,
+    amount numeric(12, 2) not null default 0,
+    supply_cost numeric(12, 2) not null default 0,
+    commission_pct numeric(5, 2) not null default 0,
+    commission_amount numeric(12, 2) not null default 0,
+    note text,
+    created_at timestamptz not null default now()
+);
+
+create index on service_tickets (business_id, created_at desc);
+
+create index on service_tickets (customer_id);
+
+create index on service_tickets (staff_user_id);
+
 -- ------------------------------------------------------------
 -- View: current stock level per SELLABLE item (the heart of the app).
 -- A row is either a simple product, or one variant/type of a
@@ -393,6 +420,8 @@ alter table lenders enable row level security;
 
 alter table lender_transactions enable row level security;
 
+alter table service_tickets enable row level security;
+
 create policy "owner_full_access" on businesses for all using (owner_auth_id = auth.uid ());
 
 create policy "owner_full_access" on staff_users for all using (
@@ -509,6 +538,15 @@ create policy "owner_full_access" on lenders for all using (
 );
 
 create policy "owner_full_access" on lender_transactions for all using (
+    business_id in (
+        select id
+        from businesses
+        where
+            owner_auth_id = auth.uid ()
+    )
+);
+
+create policy "owner_full_access" on service_tickets for all using (
     business_id in (
         select id
         from businesses
