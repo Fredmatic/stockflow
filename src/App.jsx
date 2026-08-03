@@ -27,16 +27,23 @@ import SplashScreen from './components/SplashScreen'
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/reset-password']
 
+// A quiet, wordless loading indicator — used for the brief moments while
+// the session/business are being fetched, so people don't see "Loading…"
+// or similar text flash by on every app open.
+function BlankLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="w-8 h-8 rounded-full border-2 border-line border-t-brand-dark animate-spin" />
+    </div>
+  )
+}
+
 function Gate({ children }) {
   const { session, business, businessLoading, businessError, activeStaff, loading, signOut } = useAuth()
   const location = useLocation()
   const [splashDone, setSplashDone] = useState(() => sessionStorage.getItem('stocktracer_splash_shown') === '1')
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="font-display text-xl font-semibold text-brand-dark">Loading…</div>
-    </div>
-  )
+  if (loading) return <BlankLoader />
 
   // If already logged in, don't show auth pages — go straight to app
   if (session && ['/login', '/signup'].includes(location.pathname)) {
@@ -48,11 +55,7 @@ function Gate({ children }) {
 
   // Protected area below — must be signed in
   if (!session) return <Navigate to="/" replace />
-  if (businessLoading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="font-display text-xl font-semibold text-brand-dark">Welcome back! Preparing your dashboard…</div>
-    </div>
-  )
+  if (businessLoading) return <BlankLoader />
   // New signup — redirect to staff page to add first team member
   if (business && localStorage.getItem('stocktracer_new_account')) {
     localStorage.removeItem('stocktracer_new_account')
