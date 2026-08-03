@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import Spinner from '../components/Spinner'
 
 // Money collected from a customer paying down credit/installments is cash
 // in hand, same as a cash sale — so it flows back into the capital balance
@@ -166,7 +167,7 @@ export default function Customers() {
       </div>
 
       {loading ? (
-        <p className="text-muted text-sm">Loading…</p>
+        <Spinner />
       ) : customers.length === 0 ? (
         <p className="card px-4 py-8 text-center text-sm text-muted">
           No customers yet. Add one, or pick "Credit" when completing a sale.
@@ -790,7 +791,7 @@ function CustomerDetail({ business, activeStaff, customer, onClose, onChanged })
         {/* History */}
         <div className="text-xs font-medium text-muted mb-2">History</div>
         {loading ? (
-          <p className="text-sm text-muted">Loading…</p>
+          <Spinner />
         ) : transactions.length === 0 ? (
           <p className="text-sm text-muted">No transactions yet.</p>
         ) : (

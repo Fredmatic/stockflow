@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import Spinner from '../components/Spinner'
 import BackdateControl from '../components/BackdateControl'
+import { calcCommission, calcServiceProfit, summarizeServiceTickets } from '../lib/money'
 
 const RANGES = [
   { key: 'today', label: 'Today' },
@@ -130,8 +132,8 @@ export default function Services() {
     const amt = Number(amount) || 0
     const supply = Number(supplyCost) || 0
     const pct = Number(commissionPct) || 0
-    const commission = Math.round((amt * pct) / 100)
-    const profit = amt - supply - commission
+    const commission = calcCommission(amt, pct)
+    const profit = calcServiceProfit({ amount: amt, commissionAmount: commission, supplyCost: supply })
     return { amt, supply, commission, profit }
   }, [amount, supplyCost, commissionPct])
 
@@ -197,7 +199,7 @@ export default function Services() {
 
     const pct = Number(commissionPct) || 0
     const amt = Number(amount)
-    const commissionAmount = Math.round((amt * pct) / 100)
+    const commissionAmount = calcCommission(amt, pct)
     const backdateISO = isOwner && backdateAt ? new Date(backdateAt).toISOString() : null
 
     const { error } = await supabase.from('service_tickets').insert({
@@ -237,19 +239,8 @@ export default function Services() {
     [tickets, staffFilter]
   )
 
-  const totals = useMemo(() => {
-    return scoped.reduce(
-      (acc, t) => {
-        acc.revenue += Number(t.amount)
-        acc.commission += Number(t.commission_amount)
-        acc.supply += Number(t.supply_cost)
-        acc.count += 1
-        return acc
-      },
-      { revenue: 0, commission: 0, supply: 0, count: 0 }
-    )
-  }, [scoped])
-  const totalProfit = totals.revenue - totals.commission - totals.supply
+  const totals = useMemo(() => summarizeServiceTickets(scoped), [scoped])
+  const totalProfit = totals.profit
 
   // Per-staff breakdown so the owner can see who's bringing in what.
   const byStaff = useMemo(() => {
@@ -468,7 +459,7 @@ export default function Services() {
       </div>
 
       {loading ? (
-        <p className="text-muted text-sm">Loading…</p>
+        <Spinner />
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">
@@ -537,7 +528,7 @@ export default function Services() {
             ) : (
               <div className="card divide-y divide-line">
                 {scoped.map((t) => {
-                  const profit = Number(t.amount) - Number(t.commission_amount) - Number(t.supply_cost)
+                  const profit = calcServiceProfit({ amount: t.amount, commissionAmount: t.commission_amount, supplyCost: t.supply_cost })
                   return (
                     <div key={t.id} className="flex items-center justify-between px-4 py-3">
                       <div>

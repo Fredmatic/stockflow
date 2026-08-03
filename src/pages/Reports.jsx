@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import ProLock from '../components/ProLock'
+import { calcSaleItemProfit, summarizeServiceTickets } from '../lib/money'
 
 const PERIODS = [
     { key: 'today', label: 'Today' },
@@ -134,6 +135,15 @@ function exportReportCSV(data, period, businessName) {
         data.topProducts.forEach(p => rows.push([p.name, p.qty, p.revenue, p.profit]))
         rows.push([])
     }
+    if (data.topServices?.length > 0) {
+        rows.push(['SERVICES', ''])
+        rows.push(['Total Services Revenue', data.servicesRevenue])
+        rows.push(['Total Services Count', data.servicesCount])
+        rows.push([])
+        rows.push(['Service', 'Times Done', 'Revenue (UGX)', 'Profit (UGX)'])
+        data.topServices.forEach(s => rows.push([s.name, s.qty, s.revenue, s.profit]))
+        rows.push([])
+    }
     rows.push(['EXPENSES BY CATEGORY', ''])
     rows.push(['Category', 'Amount (UGX)'])
     data.expensesByCategory?.forEach(e => rows.push([e.cat, e.amt]))
@@ -167,6 +177,7 @@ export default function Reports() {
         totalExpenses: 0, netProfit: 0, salesCount: 0, refundsCount: 0,
         topProducts: [], stockSummary: { inStock: 0, lowStock: 0, outOfStock: 0, totalValue: 0 },
         expensesByCategory: [], revenuePoints: [], salesCountPoints: [],
+        servicesRevenue: 0, servicesCost: 0, servicesCount: 0, topServices: [],
     })
 
     useEffect(() => { if (business) load() }, [business, period, customFrom, customTo])
@@ -176,10 +187,11 @@ export default function Reports() {
         const { start, end, label } = periodRange(period, customFrom, customTo)
         const startISO = start.toISOString()
 
-        const [{ data: salesRaw }, { data: expensesRaw }, { data: stockRaw }] = await Promise.all([
+        const [{ data: salesRaw }, { data: expensesRaw }, { data: stockRaw }, { data: servicesRaw }] = await Promise.all([
             supabase.from('sales').select('id,total_amount,is_refunded,created_at,sale_items(quantity,unit_price,unit_cost,products(name),product_variants(name))').eq('business_id', business.id).gte('created_at', startISO),
             supabase.from('expenses').select('amount,category').eq('business_id', business.id).gte('created_at', startISO),
             supabase.from('product_stock').select('quantity,reorder_point,unit_cost').eq('business_id', business.id),
+            supabase.from('service_tickets').select('amount,commission_amount,supply_cost,service_name,created_at').eq('business_id', business.id).gte('created_at', startISO),
         ])
 
         const validSales = (salesRaw || []).filter(s => !s.is_refunded)
@@ -195,11 +207,29 @@ export default function Reports() {
                 if (!productMap[name]) productMap[name] = { name, qty: 0, revenue: 0, profit: 0 }
                 productMap[name].qty += Number(item.quantity)
                 productMap[name].revenue += Number(item.unit_price) * Number(item.quantity)
-                productMap[name].profit += (Number(item.unit_price) - Number(item.unit_cost)) * Number(item.quantity)
+                productMap[name].profit += calcSaleItemProfit(item)
             })
         })
 
         const topProducts = Object.values(productMap).sort((a, b) => b.revenue - a.revenue).slice(0, 8)
+
+        // Services (barbershop/salon-style tickets) count as revenue too, with
+        // their commission + supplies used standing in for "cost of goods".
+        const serviceMap = {}
+        ;(servicesRaw || []).forEach(t => {
+            const name = t.service_name || 'Service'
+            if (!serviceMap[name]) serviceMap[name] = { name, qty: 0, revenue: 0, profit: 0 }
+            serviceMap[name].qty += 1
+            serviceMap[name].revenue += Number(t.amount)
+            serviceMap[name].profit += Number(t.amount) - Number(t.commission_amount) - Number(t.supply_cost)
+        })
+        const topServices = Object.values(serviceMap).sort((a, b) => b.revenue - a.revenue).slice(0, 8)
+        const serviceTotals = summarizeServiceTickets(servicesRaw)
+        const servicesRevenue = serviceTotals.revenue
+        const servicesCost = serviceTotals.commission + serviceTotals.supply
+
+        totalRevenue += servicesRevenue
+        totalCost += servicesCost
         const grossProfit = totalRevenue - totalCost
         const totalExpenses = (expensesRaw || []).reduce((s, e) => s + Number(e.amount), 0)
         const netProfit = grossProfit - totalExpenses
@@ -223,6 +253,11 @@ export default function Reports() {
             revenueByDay[day] = (revenueByDay[day] || 0) + (sale.sale_items || []).reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0)
             countByDay[day] = (countByDay[day] || 0) + 1
         })
+        ;(servicesRaw || []).forEach(t => {
+            const day = t.created_at.slice(0, 10)
+            revenueByDay[day] = (revenueByDay[day] || 0) + Number(t.amount)
+            countByDay[day] = (countByDay[day] || 0) + 1
+        })
 
         const allDays = []
         const cursor = new Date(start); cursor.setHours(0, 0, 0, 0)
@@ -240,6 +275,7 @@ export default function Reports() {
             salesCount: validSales.length, refundsCount: refunds.length,
             topProducts, stockSummary: { inStock, lowStock, outOfStock, totalValue },
             expensesByCategory,
+            servicesRevenue, servicesCost, servicesCount: (servicesRaw || []).length, topServices,
             revenuePoints: allDays.map(d => ({ x: dayLabel(d), y: revenueByDay[d] || 0 })),
             salesCountPoints: allDays.map(d => ({ x: dayLabel(d), y: countByDay[d] || 0 })),
             periodLabel: label,
@@ -332,6 +368,18 @@ export default function Reports() {
                             <section className="report-section">
                                 <h2 className="report-section-title">Top Products by Revenue</h2>
                                 <HorizontalBarChart items={data.topProducts.map(p => ({ name: p.name, value: p.revenue }))} />
+                            </section>
+                        )}
+
+                        {data.topServices.length > 0 && (
+                            <section className="report-section">
+                                <h2 className="report-section-title">Top Services by Revenue</h2>
+                                <div className="report-grid-3 mb-4">
+                                    <div className="report-stat"><div className="report-stat-label">Services Revenue</div><div className="report-stat-value">{fmt(data.servicesRevenue)}</div></div>
+                                    <div className="report-stat"><div className="report-stat-label">Services Done</div><div className="report-stat-value">{data.servicesCount}</div></div>
+                                    <div className="report-stat"><div className="report-stat-label">Commission + Supplies</div><div className="report-stat-value text-brick">− {fmt(data.servicesCost)}</div></div>
+                                </div>
+                                <HorizontalBarChart items={data.topServices.map(s => ({ name: s.name, value: s.revenue }))} />
                             </section>
                         )}
 

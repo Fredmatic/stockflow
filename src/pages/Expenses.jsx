@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import Spinner from '../components/Spinner'
 import BackdateControl from '../components/BackdateControl'
 import ProLock from '../components/ProLock'
 
@@ -205,7 +206,7 @@ export default function Expenses() {
         </div>
 
         {loading ? (
-          <p className="text-muted text-sm">Loading…</p>
+          <Spinner />
         ) : (
           <>
             <div className="card p-4">

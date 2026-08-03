@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import Spinner from '../components/Spinner'
 import BackdateControl from '../components/BackdateControl'
 
 function displayName(item) {
@@ -486,7 +487,7 @@ function SuppliersPanel({ business, suppliers, activeStaff, onClose, onChanged }
             activeStaff={activeStaff}
           />
         ) : loading ? (
-          <p className="text-sm text-muted">Loading…</p>
+          <Spinner />
         ) : suppliers.length === 0 ? (
           <p className="text-sm text-muted text-center py-8">No suppliers yet. Add one when recording your next stock-in.</p>
         ) : (
@@ -629,7 +630,7 @@ function SupplierHistory({ business, supplier, onBack, activeStaff }) {
         ))}
       </div>
 
-      {loading ? <p className="text-sm text-muted">Loading…</p> : tab === 'history' ? (
+      {loading ? <Spinner /> : tab === 'history' ? (
         // ── Restock history tab ──
         movements.length === 0 ? (
           <p className="text-sm text-muted text-center py-6">No restocks from this supplier yet.</p>

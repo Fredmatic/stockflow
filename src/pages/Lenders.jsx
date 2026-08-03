@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import Spinner from '../components/Spinner'
 import ProLock from '../components/ProLock'
 
 // Returns { days, overdue } relative to today
@@ -94,7 +95,7 @@ export default function Lenders() {
         </div>
 
         {loading ? (
-          <p className="text-muted text-sm">Loading…</p>
+          <Spinner />
         ) : lenders.length === 0 ? (
           <p className="card px-4 py-8 text-center text-sm text-muted">
             Nobody on record yet. Add someone who's lent you money or given you an advance.
@@ -460,7 +461,7 @@ function LenderDetail({ business, activeStaff, lender, onClose, onChanged }) {
         {/* History */}
         <div className="text-xs font-medium text-muted mb-2">History</div>
         {loading ? (
-          <p className="text-sm text-muted">Loading…</p>
+          <Spinner />
         ) : transactions.length === 0 ? (
           <p className="text-sm text-muted">No transactions yet.</p>
         ) : (

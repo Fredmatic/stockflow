@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import Spinner from '../components/Spinner'
 function exportToCSV(sales, businessName) {
   const rows = [['Date', 'Time', 'Staff', 'Customer', 'Type', 'Items', 'Total (UGX)', 'Cost (UGX)', 'Profit (UGX)', 'Refunded']]
   sales.forEach(sale => {
@@ -252,7 +253,7 @@ export default function Sales() {
       </div>
 
       {loading ? (
-        <p className="text-muted text-sm">Loading…</p>
+        <Spinner />
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

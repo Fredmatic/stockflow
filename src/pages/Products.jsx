@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import Spinner from '../components/Spinner'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
 
 // Suggested categories & field hints per business type
@@ -150,7 +151,7 @@ export default function Products() {
       </div>
 
       {loading ? (
-        <p className="text-muted text-sm">Loading…</p>
+        <Spinner />
       ) : products.length === 0 ? (
         <p className="card px-4 py-8 text-center text-sm text-muted">
           No products yet. Add your first one to start tracking stock.

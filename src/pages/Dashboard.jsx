@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import Spinner from '../components/Spinner'
 import BirthdayCountdown from '../components/BirthdayCountdown'
+import { calcSaleProfit, calcNetProfit, sumOwedBalance, summarizeServiceTickets } from '../lib/money'
 
 const ROUTE_LABELS = {
   '/products': 'Products',
@@ -41,7 +43,7 @@ export default function Dashboard() {
     startOfMonth.setDate(1)
     startOfMonth.setHours(0, 0, 0, 0)
 
-    const [{ data: stockData }, { data: recentData }, { data: salesData }, { data: debtorsData }] = await Promise.all([
+    const [{ data: stockData }, { data: recentData }, { data: salesData }, { data: servicesToday }, { data: debtorsData }] = await Promise.all([
       supabase.from('product_stock').select('*').eq('business_id', business.id),
       supabase
         .from('stock_movements')
@@ -54,16 +56,25 @@ export default function Dashboard() {
         .select('total_amount')
         .eq('business_id', business.id)
         .gte('created_at', startOfToday.toISOString()),
+      supabase
+        .from('service_tickets')
+        .select('amount')
+        .eq('business_id', business.id)
+        .gte('created_at', startOfToday.toISOString()),
       supabase.from('debtor_summary').select('balance').eq('business_id', business.id),
     ])
     setStock(stockData || [])
     setRecent(recentData || [])
-    const total = (salesData || []).reduce((sum, s) => sum + Number(s.total_amount), 0)
-    setTodaySales({ total, count: (salesData || []).length })
-    setTotalOwed((debtorsData || []).reduce((sum, d) => sum + Math.max(0, Number(d.balance) || 0), 0))
+    const salesTotal = (salesData || []).reduce((sum, s) => sum + Number(s.total_amount), 0)
+    const servicesTotal = (servicesToday || []).reduce((sum, s) => sum + Number(s.amount), 0)
+    setTodaySales({
+      total: salesTotal + servicesTotal,
+      count: (salesData || []).length + (servicesToday || []).length,
+    })
+    setTotalOwed(sumOwedBalance(debtorsData))
 
     if (activeStaff?.role === 'owner') {
-      const [{ data: monthSales }, { data: monthExpenses }] = await Promise.all([
+      const [{ data: monthSales }, { data: monthExpenses }, { data: monthServices }] = await Promise.all([
         supabase
           .from('sales')
           .select('is_refunded, sale_items(quantity, unit_price, unit_cost)')
@@ -74,20 +85,18 @@ export default function Dashboard() {
           .select('amount')
           .eq('business_id', business.id)
           .gte('created_at', startOfMonth.toISOString()),
+        supabase
+          .from('service_tickets')
+          .select('amount, commission_amount, supply_cost')
+          .eq('business_id', business.id)
+          .gte('created_at', startOfMonth.toISOString()),
       ])
       const grossProfit = (monthSales || [])
         .filter((s) => !s.is_refunded)
-        .reduce(
-          (sum, s) =>
-            sum +
-            (s.sale_items || []).reduce(
-              (isum, i) => isum + i.quantity * (Number(i.unit_price) - Number(i.unit_cost || 0)),
-              0
-            ),
-          0
-        )
+        .reduce((sum, s) => sum + calcSaleProfit(s.sale_items), 0)
+      const servicesProfit = summarizeServiceTickets(monthServices).profit
       const expensesTotal = (monthExpenses || []).reduce((sum, e) => sum + Number(e.amount), 0)
-      setNetProfit(grossProfit - expensesTotal)
+      setNetProfit(calcNetProfit({ grossProfit: grossProfit + servicesProfit, totalExpenses: expensesTotal }))
     }
 
     setLoading(false)
@@ -97,7 +106,7 @@ export default function Dashboard() {
   const outOfStock = stock.filter((p) => p.status === 'out_of_stock')
   const inStock = stock.filter((p) => p.status === 'in_stock')
 
-  if (loading) return <p className="text-muted text-sm">Loading…</p>
+  if (loading) return <Spinner />
 
   return (
     <div className="space-y-8">
@@ -124,7 +133,7 @@ export default function Dashboard() {
                 UGX {todaySales.total.toLocaleString()}
               </div>
               <div className="text-xs text-muted mt-1">
-                {todaySales.count} sale{todaySales.count === 1 ? '' : 's'} so far · view full history →
+                {todaySales.count} sale{todaySales.count === 1 ? '' : 's'} & service{todaySales.count === 1 ? '' : 's'} so far →
               </div>
             </div>
           </Link>
