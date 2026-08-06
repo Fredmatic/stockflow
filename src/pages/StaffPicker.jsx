@@ -28,6 +28,46 @@ export default function StaffPicker() {
       .then(({ data }) => setStaffList(data || []))
   }, [business, activeStaff])
 
+  // Let people type their PIN on a physical keyboard — digits 0-9 enter a
+  // number, Backspace deletes the last one — same as clicking the on-screen
+  // keypad. Only active once a staff member is picked, and routes to
+  // whichever flow (normal login vs. PIN reset) is currently showing.
+  useEffect(() => {
+    if (!selected) return
+
+    function onKeyDown(e) {
+      if (selected.pin_reset_required) {
+        if (resetBusy) return
+        const isConfirmStep = resetStep === 2
+        const current = isConfirmStep ? confirmPin : newPin
+        const setCurrent = isConfirmStep ? setConfirmPin : setNewPin
+        if (/^[0-9]$/.test(e.key)) {
+          e.preventDefault()
+          handleResetDigit(e.key, current, setCurrent, () => {
+            if (!isConfirmStep) setResetStep(2)
+            else saveNewPin()
+          })
+        } else if (e.key === 'Backspace') {
+          e.preventDefault()
+          setCurrent(current.slice(0, -1))
+        }
+        return
+      }
+
+      if (checking) return
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault()
+        handleDigit(e.key)
+      } else if (e.key === 'Backspace') {
+        e.preventDefault()
+        setPin((p) => p.slice(0, -1))
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selected, pin, checking, resetStep, newPin, confirmPin, resetBusy])
+
   async function handleDigit(d) {
     if (pin.length >= 4 || checking) return
     const next = pin + d
