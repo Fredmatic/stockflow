@@ -51,15 +51,17 @@ export default function Dashboard() {
         .limit(8),
       supabase
         .from('sales')
-        .select('total_amount')
+        .select('total_amount, is_refunded')
         .eq('business_id', business.id)
         .gte('created_at', startOfToday.toISOString()),
       supabase.from('debtor_summary').select('balance').eq('business_id', business.id),
     ])
     setStock(stockData || [])
     setRecent(recentData || [])
-    const total = (salesData || []).reduce((sum, s) => sum + Number(s.total_amount), 0)
-    setTodaySales({ total, count: (salesData || []).length })
+    // Keep dashboard revenue/count consistent with Sales by excluding refunded sales.
+    const activeSalesToday = (salesData || []).filter((s) => !s.is_refunded)
+    const total = activeSalesToday.reduce((sum, s) => sum + Number(s.total_amount), 0)
+    setTodaySales({ total, count: activeSalesToday.length })
     setTotalOwed((debtorsData || []).reduce((sum, d) => sum + Math.max(0, Number(d.balance) || 0), 0))
 
     if (activeStaff?.role === 'owner') {

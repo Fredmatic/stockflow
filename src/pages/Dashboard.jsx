@@ -53,7 +53,7 @@ export default function Dashboard() {
         .limit(8),
       supabase
         .from('sales')
-        .select('total_amount')
+        .select('total_amount, is_refunded')
         .eq('business_id', business.id)
         .gte('created_at', startOfToday.toISOString()),
       supabase
@@ -65,11 +65,15 @@ export default function Dashboard() {
     ])
     setStock(stockData || [])
     setRecent(recentData || [])
-    const salesTotal = (salesData || []).reduce((sum, s) => sum + Number(s.total_amount), 0)
+    // Refunded sales must not contribute to dashboard revenue or sale count.
+    // The Sales page already treats refunded sales as inactive; keep the dashboard
+    // using the same rule so both views stay consistent.
+    const activeSalesToday = (salesData || []).filter((s) => !s.is_refunded)
+    const salesTotal = activeSalesToday.reduce((sum, s) => sum + Number(s.total_amount), 0)
     const servicesTotal = (servicesToday || []).reduce((sum, s) => sum + Number(s.amount), 0)
     setTodaySales({
       total: salesTotal + servicesTotal,
-      count: (salesData || []).length + (servicesToday || []).length,
+      count: activeSalesToday.length + (servicesToday || []).length,
     })
     setTotalOwed(sumOwedBalance(debtorsData))
 
