@@ -72,7 +72,7 @@ function getTemplate(type) {
 }
 
 export default function Products() {
-  const { business, activeStaff, setBusiness } = useAuth()
+  const { business } = useAuth()
   const [products, setProducts] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -244,6 +244,7 @@ async function uploadProductImage(businessId, productId, file) {
 }
 
 function ProductForm({ business, product, onClose, onSaved }) {
+  const { activeStaff, setBusiness } = useAuth()
   const isElectronics = business?.type === 'electronics'
   const isSupermarket = business?.type === 'supermarket'
   const isRestaurant = business?.type === 'restaurant'
@@ -332,8 +333,9 @@ function ProductForm({ business, product, onClose, onSaved }) {
     setBusy(false)
   }
 
-  // Record starting stock as a purchase: it increases inventory and
-  // immediately deducts the purchase cost from the owner's capital balance.
+  // Starting stock is treated as a stock purchase. The stock movement records
+  // the inventory, while the capital transaction reduces available capital and
+  // makes the purchase visible in Spending.
   async function recordStartingStock({ productId, variantId = null, quantity, unitCost, label }) {
     const qty = Number(quantity) || 0
     const cost = Number(unitCost) || 0
@@ -354,31 +356,22 @@ function ProductForm({ business, product, onClose, onSaved }) {
       })
       .select()
       .single()
-
     if (movementError) throw movementError
 
-    // A starting quantity with no cost is inventory only; there is no
-    // cash amount to deduct until a cost is known.
     if (totalCost <= 0) return
 
-    // Read the latest balance here because a new product can contain
-    // multiple variants, each with its own starting-stock purchase.
     const { data: latestBusiness, error: balanceReadError } = await supabase
       .from('businesses')
       .select('capital_balance')
       .eq('id', business.id)
       .single()
-
     if (balanceReadError) throw balanceReadError
 
-    const currentBalance = Number(latestBusiness?.capital_balance || 0)
-    const newBalance = currentBalance - totalCost
-
+    const newBalance = Number(latestBusiness?.capital_balance || 0) - totalCost
     const { error: balanceError } = await supabase
       .from('businesses')
       .update({ capital_balance: newBalance })
       .eq('id', business.id)
-
     if (balanceError) throw balanceError
 
     const { error: txnError } = await supabase
@@ -391,13 +384,11 @@ function ProductForm({ business, product, onClose, onSaved }) {
         variant_id: variantId,
         note: `Starting stock: ${qty} x ${label}`,
         staff_user_id: activeStaff?.id || null,
+        stock_movement_id: movement?.id || null,
       })
-
     if (txnError) throw txnError
 
-    // Keep the in-app capital balance in sync immediately, so navigating
-    // to Spending/Expenses shows the new balance without a hard refresh.
-    setBusiness({ ...business, capital_balance: newBalance })
+    setBusiness((prev) => (prev ? { ...prev, capital_balance: newBalance } : prev))
   }
 
   async function handleSubmit(e) {
