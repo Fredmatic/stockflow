@@ -71,7 +71,7 @@ function getTemplate(type) {
 }
 
 export default function Products() {
-  const { business } = useAuth()
+  const { business, activeStaff, setBusiness } = useAuth()
   const [products, setProducts] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -331,6 +331,74 @@ function ProductForm({ business, product, onClose, onSaved }) {
     setBusy(false)
   }
 
+  // Record starting stock as a purchase: it increases inventory and
+  // immediately deducts the purchase cost from the owner's capital balance.
+  async function recordStartingStock({ productId, variantId = null, quantity, unitCost, label }) {
+    const qty = Number(quantity) || 0
+    const cost = Number(unitCost) || 0
+    if (qty <= 0) return
+
+    const totalCost = qty * cost
+    const { data: movement, error: movementError } = await supabase
+      .from('stock_movements')
+      .insert({
+        product_id: productId,
+        variant_id: variantId,
+        business_id: business.id,
+        type: 'restock',
+        quantity: qty,
+        unit_cost: cost > 0 ? cost : null,
+        note: 'Starting stock',
+        staff_user_id: activeStaff?.id || null,
+      })
+      .select()
+      .single()
+
+    if (movementError) throw movementError
+
+    // A starting quantity with no cost is inventory only; there is no
+    // cash amount to deduct until a cost is known.
+    if (totalCost <= 0) return
+
+    // Read the latest balance here because a new product can contain
+    // multiple variants, each with its own starting-stock purchase.
+    const { data: latestBusiness, error: balanceReadError } = await supabase
+      .from('businesses')
+      .select('capital_balance')
+      .eq('id', business.id)
+      .single()
+
+    if (balanceReadError) throw balanceReadError
+
+    const currentBalance = Number(latestBusiness?.capital_balance || 0)
+    const newBalance = currentBalance - totalCost
+
+    const { error: balanceError } = await supabase
+      .from('businesses')
+      .update({ capital_balance: newBalance })
+      .eq('id', business.id)
+
+    if (balanceError) throw balanceError
+
+    const { error: txnError } = await supabase
+      .from('capital_transactions')
+      .insert({
+        business_id: business.id,
+        type: 'stock_purchase',
+        amount: -totalCost,
+        product_id: productId,
+        variant_id: variantId,
+        note: `Starting stock: ${qty} x ${label}`,
+        staff_user_id: activeStaff?.id || null,
+      })
+
+    if (txnError) throw txnError
+
+    // Keep the in-app capital balance in sync immediately, so navigating
+    // to Spending/Expenses shows the new balance without a hard refresh.
+    setBusiness({ ...business, capital_balance: newBalance })
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
@@ -413,13 +481,12 @@ function ProductForm({ business, product, onClose, onSaved }) {
               .single()
             if (vErr) throw vErr
             if (Number(r.starting_quantity) > 0) {
-              await supabase.from('stock_movements').insert({
-                product_id: product.id,
-                variant_id: createdVariant.id,
-                business_id: business.id,
-                type: 'restock',
-                quantity: Number(r.starting_quantity),
-                note: 'Starting stock',
+              await recordStartingStock({
+                productId: product.id,
+                variantId: createdVariant.id,
+                quantity: r.starting_quantity,
+                unitCost: r.cost_price,
+                label: `${r.name.trim()}${r.sub_name?.trim() ? ` — ${r.sub_name.trim()}` : ''}`,
               })
             }
           }
@@ -450,23 +517,21 @@ function ProductForm({ business, product, onClose, onSaved }) {
               .single()
             if (vErr) throw vErr
             if (Number(r.starting_quantity) > 0) {
-              await supabase.from('stock_movements').insert({
-                product_id: data.id,
-                variant_id: createdVariant.id,
-                business_id: business.id,
-                type: 'restock',
-                quantity: Number(r.starting_quantity),
-                note: 'Starting stock',
+              await recordStartingStock({
+                productId: data.id,
+                variantId: createdVariant.id,
+                quantity: r.starting_quantity,
+                unitCost: r.cost_price,
+                label: `${r.name.trim()}${r.sub_name?.trim() ? ` — ${r.sub_name.trim()}` : ''}`,
               })
             }
           }
         } else if (Number(form.starting_quantity) > 0) {
-          await supabase.from('stock_movements').insert({
-            product_id: data.id,
-            business_id: business.id,
-            type: 'restock',
-            quantity: Number(form.starting_quantity),
-            note: 'Starting stock',
+          await recordStartingStock({
+            productId: data.id,
+            quantity: form.starting_quantity,
+            unitCost: form.cost_price,
+            label: form.name.trim(),
           })
         }
       }
