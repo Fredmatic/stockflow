@@ -535,11 +535,99 @@ function ProductForm({ business, product, onClose, onSaved }) {
     }
   }
 
+  // Removing a product only ever hid it (is_active = false) — it never
+  // touched capital_balance. Any unsold stock still sitting on the shelf had
+  // already been deducted from capital at Stock In time, so that money needs
+  // to come back to the balance now, the same way a sale recovers cost.
   async function handleDeactivate() {
     if (!product) return
     setBusy(true)
-    await supabase.from('products').update({ is_active: false }).eq('id', product.id)
-    onSaved()
+    setError('')
+    try {
+      let totalRemainingValue = 0
+      const remainingLines = []
+
+      if (product.has_variants) {
+        const { data: activeVariants, error: variantsError } = await supabase
+          .from('product_variants')
+          .select('id, name, sub_name, cost_price')
+          .eq('product_id', product.id)
+          .eq('is_active', true)
+        if (variantsError) throw variantsError
+
+        for (const v of activeVariants || []) {
+          const { data: movements, error: movementsError } = await supabase
+            .from('stock_movements')
+            .select('quantity')
+            .eq('variant_id', v.id)
+          if (movementsError) throw movementsError
+
+          const qty = (movements || []).reduce((sum, m) => sum + (m.quantity || 0), 0)
+          if (qty > 0) {
+            totalRemainingValue += qty * Number(v.cost_price || 0)
+            remainingLines.push(`${qty} x ${v.name}${v.sub_name ? ` — ${v.sub_name}` : ''}`)
+          }
+
+          // Deactivate the variant too, so it doesn't linger as "active"
+          // under a now-inactive parent product.
+          await supabase.from('product_variants').update({ is_active: false }).eq('id', v.id)
+        }
+      } else {
+        const { data: movements, error: movementsError } = await supabase
+          .from('stock_movements')
+          .select('quantity')
+          .eq('product_id', product.id)
+          .is('variant_id', null)
+        if (movementsError) throw movementsError
+
+        const qty = (movements || []).reduce((sum, m) => sum + (m.quantity || 0), 0)
+        if (qty > 0) {
+          totalRemainingValue = qty * Number(product.cost_price || 0)
+          remainingLines.push(`${qty} x ${product.name}`)
+        }
+      }
+
+      if (totalRemainingValue > 0) {
+        const { data: latestBusiness, error: balanceReadError } = await supabase
+          .from('businesses')
+          .select('capital_balance')
+          .eq('id', business.id)
+          .single()
+        if (balanceReadError) throw balanceReadError
+
+        const newBalance = Number(latestBusiness?.capital_balance || 0) + totalRemainingValue
+        const { error: balanceError } = await supabase
+          .from('businesses')
+          .update({ capital_balance: newBalance })
+          .eq('id', business.id)
+        if (balanceError) throw balanceError
+
+        const { error: txnError } = await supabase
+          .from('capital_transactions')
+          .insert({
+            business_id: business.id,
+            type: 'adjustment',
+            amount: totalRemainingValue,
+            product_id: product.id,
+            note: `Product removed — unsold stock returned to capital: ${remainingLines.join(', ')}`,
+            staff_user_id: activeStaff?.id || null,
+          })
+        if (txnError) throw txnError
+
+        setBusiness((prev) => (prev ? { ...prev, capital_balance: newBalance } : prev))
+      }
+
+      const { error: deactivateError } = await supabase
+        .from('products')
+        .update({ is_active: false })
+        .eq('id', product.id)
+      if (deactivateError) throw deactivateError
+
+      onSaved()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
   }
 
   return (
