@@ -17,8 +17,8 @@ const TESTIMONIALS = [
 ]
 
 const PLANS = [
-  { name: 'Starter', price: 'UGX 30,000', period: '/month', features: ['Up to 3 staff', '500 products', 'Sales & stock tracking', 'Basic reports'], cta: 'Start free trial', highlight: false },
-  { name: 'Pro', price: 'UGX 80,000', period: '/month', features: ['Unlimited staff', 'Unlimited products', 'Full profit reports', 'Customer credit tracking', 'Expense management', 'Priority support'], cta: 'Start free trial', highlight: true },
+  { name: 'Starter', price: 'UGX 15,000', period: '/month', features: ['Up to 3 staff', '500 products', 'Sales & stock tracking', 'Basic reports'], cta: 'Start free trial', highlight: false },
+  { name: 'Pro', price: 'UGX 30,000', period: '/month', features: ['Unlimited staff', 'Unlimited products', 'Full profit reports', 'Customer credit tracking', 'Expense management', 'Priority support'], cta: 'Start free trial', highlight: true },
   { name: 'Custom', price: 'Let\'s talk', period: '', features: ['Multi-branch support', 'Custom features for your business', 'Setup & training included', 'Dedicated support'], cta: 'Contact us', highlight: false },
 ]
 
