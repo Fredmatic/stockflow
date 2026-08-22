@@ -12,7 +12,7 @@ const FEATURES = [
 
 const TESTIMONIALS = [
   { name: 'Fred M.', business: 'FredMatic Shop, Kampala', quote: 'StockTracer showed me I was losing money on two products I thought were profitable. That alone paid for itself.' },
-  { name: 'Namubiru J.', business: 'Salon & Beauty, Bulenga-Kampala', quote: 'My staff used to steal stock and I had no way to prove it. Now every item is tracked.' },
+  { name: 'Jane M.', business: 'Salon & Beauty, Bulenga-Kampala', quote: 'My staff used to steal stock and I had no way to prove it. Now every item is tracked.' },
   { name: 'Stanely S.', business: 'Electronics Hub, Bwaise', quote: 'I can see my shop\'s performance from my phone even when I\'m not there. Game changer.' },
 ]
 
@@ -194,7 +194,14 @@ export default function Landing() {
                   ))}
                 </ul>
                 <button
-                  onClick={() => navigate(plan.name === 'Custom' ? `https://wa.me/${WA_NUMBER}` : '/signup')}
+                  onClick={() => {
+                    if (plan.name === 'Custom') {
+                      const text = "Hi, I'm interested in the Custom plan for my business. Can you tell me more?"
+                      window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(text)}`, '_blank')
+                    } else {
+                      navigate('/signup')
+                    }
+                  }}
                   className={`w-full py-2 rounded-md text-sm font-medium transition-colors ${plan.highlight ? 'bg-white text-brand-dark hover:bg-brand-light' : 'btn-primary'}`}
                 >
                   {plan.cta}
