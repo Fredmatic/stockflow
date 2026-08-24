@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import '../styles/auth-card.css'
 
 const STEPS = ['Your business', 'Your account', 'Done']
 
@@ -75,187 +76,178 @@ export default function Signup() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
+    <div className="auth-shell">
       {/* Header */}
-      <div className="text-center mb-8">
-        <button onClick={() => navigate('/')} className="font-display text-2xl font-semibold text-brand-dark mb-1 block">
+      <div className="auth-brand">
+        <button onClick={() => navigate('/')} className="auth-brand-name block">
           StockTracer
         </button>
-        <p className="text-muted text-sm">Create your free account</p>
+        <p className="auth-brand-tagline">Create your free account</p>
       </div>
 
       {/* Progress */}
       {step < 2 && (
-        <div className="w-full max-w-sm mb-6">
+        <div className="w-full mb-6" style={{ maxWidth: '26rem' }}>
           <div className="flex items-center gap-2">
             {STEPS.slice(0, 2).map((label, i) => (
               <div key={label} className="flex items-center gap-2 flex-1">
-                <div className={`w-6 h-6 rounded-full text-xs font-semibold flex items-center justify-center flex-shrink-0 ${i < step ? 'bg-brand-dark text-white' : i === step ? 'bg-brand text-white' : 'bg-line text-muted'
-                  }`}>
+                <div className={`auth-step-dot ${i < step ? 'auth-step-dot--done' : i === step ? 'auth-step-dot--active' : ''}`}>
                   {i < step ? '✓' : i + 1}
                 </div>
-                <span className={`text-xs flex-1 ${i === step ? 'text-ink font-medium' : 'text-muted'}`}>{label}</span>
-                {i < 1 && <div className={`h-px flex-1 ${i < step ? 'bg-brand-dark' : 'bg-line'}`} />}
+                <span className={`auth-step-label flex-1 ${i === step ? 'auth-step-label--active' : ''}`}>{label}</span>
+                {i < 1 && <div className={`auth-step-rule ${i < step ? 'auth-step-rule--done' : ''}`} />}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      <div className="w-full max-w-sm">
+      <div className="auth-card">
+        <div className="auth-card-inner">
 
-        {/* STEP 0 — Business info */}
-        {step === 0 && (
-          <form
-            onSubmit={(e) => { e.preventDefault(); setStep(1) }}
-            className="bg-paper-raised border border-line rounded-lg p-6 space-y-4"
-          >
-            <h2 className="font-display font-semibold">Tell us about your business</h2>
+          {/* STEP 0 — Business info */}
+          {step === 0 && (
+            <form onSubmit={(e) => { e.preventDefault(); setStep(1) }}>
+              <h2 className="font-semibold mb-4">Tell us about your business</h2>
 
-            <Field label="Business name">
-              <input
-                required
-                className="input"
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="e.g. Fred's Shop"
-                autoFocus
-              />
-            </Field>
-
-            <Field label="Your name (optional)">
-              <input
-                className="input"
-                value={ownerName}
-                onChange={(e) => setOwnerName(e.target.value)}
-                placeholder="e.g. Fred Ssaazi"
-              />
-            </Field>
-
-            <Field label="Type of business">
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                {BUSINESS_TYPES.map((t) => (
-                  <button
-                    key={t.value}
-                    type="button"
-                    onClick={() => setBusinessType(t.value)}
-                    className={`text-left text-xs px-3 py-2 rounded-md border transition-colors ${businessType === t.value
-                        ? 'border-brand bg-brand-light text-brand-dark font-medium'
-                        : 'border-line text-muted hover:border-brand-light'
-                      }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </Field>
-
-            <button
-              type="submit"
-              disabled={!businessName || !businessType}
-              className="btn-primary w-full py-3"
-            >
-              Continue →
-            </button>
-          </form>
-        )}
-
-        {/* STEP 1 — Account */}
-        {step === 1 && (
-          <form onSubmit={handleCreateAccount} className="bg-paper-raised border border-line rounded-lg p-6 space-y-4">
-            <div>
-              <h2 className="font-display font-semibold">Create your account</h2>
-              <p className="text-xs text-muted mt-1">Setting up <strong>{businessName}</strong></p>
-            </div>
-
-            <Field label="Email address">
-              <input
-                required
-                type="email"
-                className="input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoFocus
-              />
-            </Field>
-
-            <Field label="Password">
-              <div className="relative">
+              <label className="auth-field">
+                <span className="auth-field-label">Business name</span>
                 <input
                   required
-                  type={showPassword ? 'text' : 'password'}
-                  minLength={6}
-                  className="input pr-10"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
+                  className="auth-input"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="e.g. Fred's Shop"
+                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-0 px-3 flex items-center text-muted hover:text-ink"
-                >
-                  {showPassword ? '🙈' : '👁'}
-                </button>
+              </label>
+
+              <label className="auth-field">
+                <span className="auth-field-label">Your name (optional)</span>
+                <input
+                  className="auth-input"
+                  value={ownerName}
+                  onChange={(e) => setOwnerName(e.target.value)}
+                  placeholder="e.g. Fred Ssaazi"
+                />
+              </label>
+
+              <label className="auth-field">
+                <span className="auth-field-label">Type of business</span>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  {BUSINESS_TYPES.map((t) => (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setBusinessType(t.value)}
+                      className={`auth-chip ${businessType === t.value ? 'auth-chip--active' : ''}`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </label>
+
+              <button
+                type="submit"
+                disabled={!businessName || !businessType}
+                className="auth-btn-primary mt-2"
+              >
+                Continue →
+              </button>
+            </form>
+          )}
+
+          {/* STEP 1 — Account */}
+          {step === 1 && (
+            <form onSubmit={handleCreateAccount}>
+              <div className="mb-4">
+                <h2 className="font-semibold">Create your account</h2>
+                <p className="auth-muted text-xs mt-1">Setting up <strong>{businessName}</strong></p>
               </div>
-            </Field>
 
-            {error && <p className="text-brick text-sm">{error}</p>}
+              <label className="auth-field">
+                <span className="auth-field-label">Email address</span>
+                <input
+                  required
+                  type="email"
+                  className="auth-input"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoFocus
+                />
+              </label>
 
-            <button type="submit" disabled={busy} className="btn-primary w-full py-3">
-              {busy ? 'Creating your account…' : 'Create account & start free trial'}
-            </button>
+              <label className="auth-field">
+                <span className="auth-field-label">Password</span>
+                <div className="relative">
+                  <input
+                    required
+                    type={showPassword ? 'text' : 'password'}
+                    minLength={6}
+                    className="auth-input pr-10"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="auth-toggle-visibility"
+                  >
+                    {showPassword ? '🙈' : '👁'}
+                  </button>
+                </div>
+              </label>
 
-            <button type="button" onClick={() => setStep(0)} className="w-full text-xs text-muted text-center hover:text-ink">
-              ← Back
-            </button>
-          </form>
-        )}
+              {error && <p className="auth-error mb-4">{error}</p>}
 
-        {/* STEP 2 — Done */}
-        {step === 2 && (
-          <div className="bg-paper-raised border border-line rounded-lg p-8 text-center space-y-4">
-            {needsConfirmation ? (
-              <>
-                <div className="text-4xl">📧</div>
-                <h2 className="font-display font-semibold text-lg">Check your email</h2>
-                <p className="text-sm text-muted">
-                  We sent a confirmation link to <strong>{email}</strong>. Click it to verify your account, then come back and sign in.
-                </p>
-                <p className="text-xs text-muted">
-                  Your business <strong>{businessName}</strong> will be set up automatically when you sign in for the first time.
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="text-4xl">🎉</div>
-                <h2 className="font-display font-semibold text-lg">You're all set!</h2>
-                <p className="text-sm text-muted">
-                  <strong>{businessName}</strong> is ready. Start by adding your products and staff.
-                </p>
-              </>
-            )}
+              <button type="submit" disabled={busy} className="auth-btn-primary">
+                {busy ? 'Creating your account…' : 'Create account & start free trial'}
+              </button>
 
-            <button onClick={() => navigate('/login')} className="btn-primary w-full py-3 mt-2">
-              Go to sign in →
-            </button>
-          </div>
-        )}
+              <button type="button" onClick={() => setStep(0)} className="auth-muted w-full text-xs text-center mt-3 hover:underline">
+                ← Back
+              </button>
+            </form>
+          )}
 
-        <p className="text-xs text-muted text-center mt-5">
-          Already have an account?{' '}
-          <Link to="/login" className="text-brand-dark font-medium hover:underline">Sign in</Link>
-        </p>
+          {/* STEP 2 — Done */}
+          {step === 2 && (
+            <div className="text-center">
+              {needsConfirmation ? (
+                <>
+                  <div className="text-4xl mb-3">📧</div>
+                  <h2 className="font-semibold text-lg mb-2">Check your email</h2>
+                  <p className="auth-muted text-sm">
+                    We sent a confirmation link to <strong style={{ color: '#E7EDE9' }}>{email}</strong>. Click it to verify your account, then come back and sign in.
+                  </p>
+                  <p className="auth-muted text-xs mt-3">
+                    Your business <strong style={{ color: '#E7EDE9' }}>{businessName}</strong> will be set up automatically when you sign in for the first time.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-4xl mb-3">🎉</div>
+                  <h2 className="font-semibold text-lg mb-2">You're all set!</h2>
+                  <p className="auth-muted text-sm">
+                    <strong style={{ color: '#E7EDE9' }}>{businessName}</strong> is ready. Start by adding your products and staff.
+                  </p>
+                </>
+              )}
+
+              <button onClick={() => navigate('/login')} className="auth-btn-primary mt-5">
+                Go to sign in →
+              </button>
+            </div>
+          )}
+
+          <p className="auth-muted text-xs text-center mt-5">
+            Already have an account?{' '}
+            <Link to="/login" className="auth-link">Sign in</Link>
+          </p>
+        </div>
       </div>
     </div>
-  )
-}
-
-function Field({ label, children }) {
-  return (
-    <label className="block">
-      <span className="text-xs font-medium text-muted mb-1 block">{label}</span>
-      {children}
-    </label>
   )
 }

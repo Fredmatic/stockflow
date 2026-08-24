@@ -1,0 +1,360 @@
+/* ── Auth pages: collapsed pill that expands into the full form ──
+   Matches the "hover expanding login" reference: a small pill by
+   default, a giant rotating conic-gradient square glows behind it
+   (clipped to the card's rounded rect by overflow:hidden — this is
+   what makes each edge read as a travelling bar of color instead of
+   a circular swirl), and hovering/tapping reveals the real form.
+   Brand green instead of neon cyan/pink. Scoped to .auth-shell. */
+
+.auth-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    background:
+        radial-gradient(circle at 20% 20%, rgba(63, 163, 136, 0.16), transparent 55%),
+        radial-gradient(circle at 80% 85%, rgba(200, 134, 46, 0.10), transparent 50%),
+        #0B1512;
+    color: #E7EDE9;
+}
+
+.auth-shell .auth-brand {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.auth-shell .auth-brand-name {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #F2F6F4;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+.auth-shell .auth-brand-tagline {
+    color: #8FA39A;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+/* ── The card shell ── */
+.auth-card {
+    position: relative;
+    width: 100%;
+    max-width: 26rem;
+    border-radius: 1rem;
+    background: #101F1A;
+    isolation: isolate;
+    overflow: hidden;
+    /* clips the giant rotating square to the card's rounded rect */
+    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+/* The giant rotating gradient. Deliberately much bigger than the card
+   itself (44rem, vs. the card's ~26rem width) and forced square, so
+   only its flattened center passes through the card window — that's
+   what turns the sweep into straight travelling bars per edge. */
+.auth-card::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 0;
+    width: 44rem;
+    height: 44rem;
+    transform: translate(-50%, -50%) rotate(0deg);
+    background: conic-gradient(from 0deg,
+            transparent 0deg 36deg,
+            #34D399 36deg 48deg,
+            transparent 48deg 126deg,
+            #7CE8C6 126deg 138deg,
+            transparent 138deg 216deg,
+            #34D399 216deg 228deg,
+            transparent 228deg 306deg,
+            #7CE8C6 306deg 318deg,
+            transparent 318deg 360deg);
+    filter:
+        blur(1px) drop-shadow(0 0 3px rgba(124, 232, 198, 1)) drop-shadow(0 0 10px rgba(52, 211, 153, 0.85)) drop-shadow(0 0 22px rgba(52, 211, 153, 0.55));
+    animation: auth-neon-rotate 6s linear infinite;
+    pointer-events: none;
+}
+
+.auth-card:hover::before,
+.auth-card--expanded::before,
+.auth-card:focus-within::before {
+    animation-duration: 3s;
+}
+
+@keyframes auth-neon-rotate {
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+/* Opt out of the rotating glow border entirely (signup — the card
+   gets too tall for the giant-square technique to read well) while
+   keeping the same collapse/expand pill behavior and card styling. */
+.auth-card--no-glow {
+    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.6), 0 0 0 1px #23392F;
+}
+
+.auth-card--no-glow::before {
+    display: none;
+}
+
+/* ── Collapsed pill trigger ──
+   A thin (3px) dark cover sits on top of the rotating square, leaving
+   only a sliver of it visible as a glowing border. */
+.auth-card-collapsed {
+    position: relative;
+    z-index: 1;
+    width: calc(100% - 6px);
+    margin: 3px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    height: 3.75rem;
+    background: #101F1A;
+    border: 0;
+    border-radius: calc(1rem - 3px);
+    color: #DFF3EC;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: opacity 280ms ease, height 400ms ease, margin 400ms ease, padding 400ms ease;
+}
+
+.auth-card-collapsed:hover {
+    color: #F2F6F4;
+}
+
+/* ── Expand wrapper — animates height via grid-template-rows so we
+   don't need to measure content height in JS. ── */
+.auth-card-expand-wrap {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 420ms ease;
+}
+
+.auth-card-expand-track {
+    overflow: hidden;
+    min-height: 0;
+}
+
+.auth-card--expanded .auth-card-collapsed,
+.auth-card:hover .auth-card-collapsed,
+.auth-card:focus-within .auth-card-collapsed {
+    height: 0;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.auth-card--expanded .auth-card-expand-wrap,
+.auth-card:hover .auth-card-expand-wrap,
+.auth-card:focus-within .auth-card-expand-wrap {
+    grid-template-rows: 1fr;
+}
+
+.auth-card-inner {
+    margin: 3px;
+    background: #101F1A;
+    border-radius: calc(1rem - 3px);
+    padding: 1.75rem 1.5rem;
+}
+
+.auth-card-inner h1,
+.auth-card-inner h2 {
+    font-family: var(--font-display);
+    color: #F2F6F4;
+}
+
+/* Fields */
+.auth-field {
+    display: block;
+    margin-bottom: 1rem;
+}
+
+.auth-field-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #8FA39A;
+    margin-bottom: 0.375rem;
+}
+
+.auth-input {
+    width: 100%;
+    background: #0C1815;
+    border: 1px solid #23392F;
+    border-radius: 0.5rem;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.9rem;
+    color: #E7EDE9;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.auth-input::placeholder {
+    color: #56685F;
+}
+
+.auth-input:focus {
+    outline: none;
+    border-color: #3FA388;
+    box-shadow: 0 0 0 3px rgba(63, 163, 136, 0.18);
+}
+
+@media (max-width: 768px) {
+    .auth-input {
+        font-size: 16px;
+        /* prevent iOS auto-zoom, matches .input elsewhere */
+    }
+}
+
+.auth-toggle-visibility {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    padding-inline: 0.75rem;
+    color: #8FA39A;
+    background: none;
+    border: 0;
+}
+
+.auth-toggle-visibility:hover {
+    color: #E7EDE9;
+}
+
+/* Primary CTA — glowing pill, matches the reference's "Sign in" button */
+.auth-btn-primary {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border-radius: 999px;
+    border: 0;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #06120D;
+    background: linear-gradient(135deg, #6FC2AA, #3FA388);
+    box-shadow: 0 0 20px rgba(63, 163, 136, 0.35);
+    transition: box-shadow 150ms ease, transform 150ms ease, opacity 150ms ease;
+    cursor: pointer;
+}
+
+.auth-btn-primary:hover:not(:disabled) {
+    box-shadow: 0 0 28px rgba(63, 163, 136, 0.55);
+    transform: translateY(-1px);
+}
+
+.auth-btn-primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.auth-link {
+    color: #6FC2AA;
+    font-weight: 500;
+}
+
+.auth-link:hover {
+    text-decoration: underline;
+}
+
+.auth-muted {
+    color: #8FA39A;
+}
+
+.auth-error {
+    color: #E0786A;
+    font-size: 0.85rem;
+}
+
+/* Business-type picker chips (Signup step 1), dark-mode version of the
+   existing light chip grid */
+.auth-chip {
+    text-align: left;
+    font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid #23392F;
+    color: #8FA39A;
+    background: #0C1815;
+    cursor: pointer;
+    transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.auth-chip--active {
+    border-color: #3FA388;
+    background: rgba(63, 163, 136, 0.12);
+    color: #DFF3EC;
+    font-weight: 500;
+}
+
+/* Step progress dots for Signup */
+.auth-step-dot {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: #1A2D26;
+    color: #8FA39A;
+}
+
+.auth-step-dot--done {
+    background: #3FA388;
+    color: #06120D;
+}
+
+.auth-step-dot--active {
+    background: #6FC2AA;
+    color: #06120D;
+}
+
+.auth-step-label {
+    font-size: 0.75rem;
+    color: #8FA39A;
+}
+
+.auth-step-label--active {
+    color: #E7EDE9;
+    font-weight: 500;
+}
+
+.auth-step-rule {
+    height: 1px;
+    flex: 1;
+    background: #23392F;
+}
+
+.auth-step-rule--done {
+    background: #3FA388;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auth-card::before {
+        animation: none !important;
+    }
+
+    .auth-card-collapsed,
+    .auth-card-expand-wrap {
+        transition: none !important;
+    }
+}
