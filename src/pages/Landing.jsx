@@ -196,7 +196,7 @@ export default function Landing() {
                 <button
                   onClick={() => {
                     if (plan.name === 'Custom') {
-                      const text = "Hi, I'm interested in the Custom plan for my business. Can you tell me more?"
+                      const text = "Hi Fred, I'm interested in the Custom plan for my business. Can you tell me more?"
                       window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(text)}`, '_blank')
                     } else {
                       navigate('/signup')
