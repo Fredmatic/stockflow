@@ -17,31 +17,173 @@ function displayName(item) {
   return `${item.product_name} — ${label}`
 }
 
+const BUSINESS_RECEIPT_CONFIG = {
+  name: 'FREDMATIC SHOP',
+  tagline: 'Fashion • Style • Quality',
+  location: 'Bwaise Kikuubo Arcade',
+  phone: '0740193837',
+  tiktok: 'Fredmatic',
+  whatsapp: '256740193837',
+  prefix: 'FM',
+}
+
+function getReceiptNumber(date = new Date()) {
+  const datePart = String(date.getDate()).padStart(2, '0') +
+    String(date.getMonth() + 1).padStart(2, '0') +
+    String(date.getFullYear()).slice(-2)
+  const key = `fredmatic_receipt_sequence_${datePart}`
+  const current = Number(window.localStorage?.getItem(key) || 0) + 1
+  window.localStorage?.setItem(key, String(current))
+  return `${BUSINESS_RECEIPT_CONFIG.prefix}-${datePart}-${String(current).padStart(3, '0')}`
+}
+
 function buildReceiptText(receipt) {
   const lines = []
   lines.push(`*${receipt.businessName}*`)
-  lines.push(receipt.date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }))
+  lines.push(`✨ ${receipt.tagline} ✨`)
   lines.push('')
+  lines.push(`📅 ${receipt.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`)
+  lines.push(`🕐 ${receipt.date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`)
+  lines.push(`🧾 Receipt No: #${receipt.receiptNumber}`)
+  lines.push('')
+  lines.push('*ITEMS*')
   receipt.items.forEach((it) => {
     const lineTotal = it.quantity * it.unitPrice
-    lines.push(`${it.quantity} x ${it.name} — UGX ${lineTotal.toLocaleString()}`)
+    lines.push(`${it.name}`)
+    lines.push(`Qty: ${it.quantity} × UGX ${it.unitPrice.toLocaleString()}`)
+    lines.push(`Amount: UGX ${lineTotal.toLocaleString()}`)
   })
   lines.push('')
-  lines.push(`*Total: UGX ${receipt.total.toLocaleString()}*`)
-  lines.push(
-    receipt.paymentMethod === 'credit'
-      ? `Payment: On credit${receipt.customerName ? ` (${receipt.customerName})` : ''}`
-      : 'Payment: Cash'
-  )
+  lines.push(`*💰 TOTAL: UGX ${receipt.total.toLocaleString()}*`)
+  lines.push(`💳 Payment: ${receipt.paymentMethod === 'cash' ? 'Cash' : receipt.paymentMethod === 'credit' ? 'On Credit' : 'Installments'}`)
+  if (receipt.customerName) lines.push(`Customer: ${receipt.customerName}`)
   lines.push('')
-  lines.push('Thank you for your business!')
+  lines.push(receipt.paymentMethod === 'cash' ? '🟢 PAYMENT RECEIVED' : receipt.paymentMethod === 'credit' ? '🟠 PAYMENT PENDING' : '🟠 PAYMENT PLAN')
+  if (receipt.paymentMethod !== 'cash') lines.push(`Amount Due: UGX ${receipt.total.toLocaleString()}`)
+  lines.push('')
+  lines.push(`📍 Location: ${receipt.location}`)
+  lines.push(`📞 Call/WhatsApp: ${receipt.phone}`)
+  lines.push(`🎵 TikTok: ${receipt.tiktok}`)
+  lines.push('')
+  lines.push('📱 Scan our QR code to chat with us on WhatsApp.')
+  lines.push('')
+  lines.push('❤️ Thank you for shopping with FredMatic Shop!')
+  lines.push('We truly appreciate your business.')
   return lines.join('\n')
 }
 
 function shareReceiptWhatsApp(receipt) {
   const text = buildReceiptText(receipt)
   const url = `https://wa.me/?text=${encodeURIComponent(text)}`
-  window.open(url, '_blank')
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+function ReceiptModal({ receipt, onClose }) {
+  if (!receipt) return null
+
+  function printReceipt() {
+    window.print()
+  }
+
+  return (
+    <div className="receipt-modal-overlay" role="dialog" aria-modal="true" aria-label="Receipt preview">
+      <div className="receipt-modal no-print">
+        <div className="receipt-modal-header">
+          <h2>Receipt Preview</h2>
+          <button onClick={onClose} aria-label="Close receipt">×</button>
+        </div>
+        <div className="receipt-paper" id="printable-receipt">
+          <div className="receipt-brand">🧾 {receipt.businessName}</div>
+          <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
+          <div className="receipt-tagline">✨ {receipt.tagline} ✨</div>
+          <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
+
+          <div className="receipt-meta">
+            <div>📅 {receipt.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+            <div>🕐 {receipt.date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</div>
+            <div>🧾 Receipt No: <strong>#{receipt.receiptNumber}</strong></div>
+          </div>
+
+          <div className="receipt-section-title">ITEMS</div>
+          <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
+          <div className="receipt-items">
+            {receipt.items.map((it, index) => (
+              <div className="receipt-item" key={`${it.name}-${index}`}>
+                <div className="receipt-item-name">{it.name}</div>
+                <div>Qty: {it.quantity} × UGX {it.unitPrice.toLocaleString()}</div>
+                <div>Amount: UGX {(it.quantity * it.unitPrice).toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
+          <div className="receipt-total">💰 TOTAL: UGX {receipt.total.toLocaleString()}</div>
+          <div className="receipt-payment">💳 Payment: {receipt.paymentMethod === 'cash' ? 'Cash' : receipt.paymentMethod === 'credit' ? 'On Credit' : 'Installments'}</div>
+          {receipt.customerName && <div className="receipt-customer">Customer: {receipt.customerName}</div>}
+          <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
+
+          <div className={`receipt-status ${receipt.paymentMethod === 'cash' ? 'received' : 'pending'}`}>
+            {receipt.paymentMethod === 'cash' ? '🟢 PAYMENT RECEIVED' : receipt.paymentMethod === 'credit' ? '🟠 PAYMENT PENDING' : '🟠 PAYMENT PLAN'}
+          </div>
+          {receipt.paymentMethod !== 'cash' && (
+            <div className="receipt-due">Amount Due: UGX {receipt.total.toLocaleString()}</div>
+          )}
+
+          <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
+          <div className="receipt-contact">📍 Location: {receipt.location}</div>
+          <div className="receipt-contact">📞 Call/WhatsApp: {receipt.phone}</div>
+          <div className="receipt-contact">🎵 TikTok: {receipt.tiktok}</div>
+          <img className="receipt-qr" src="/whatsapp-qr.png" alt="WhatsApp QR code" />
+          <div className="receipt-scan">📱 Scan our QR code to chat with us on WhatsApp.</div>
+          <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
+          <div className="receipt-thanks">❤️ Thank you for shopping with FredMatic Shop!</div>
+          <div className="receipt-thanks-sub">We truly appreciate your business.</div>
+          <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
+        </div>
+        <div className="receipt-actions">
+          <button onClick={printReceipt} className="btn-secondary">🖨️ Print Receipt</button>
+          <button onClick={() => shareReceiptWhatsApp(receipt)} className="receipt-whatsapp">💬 Share on WhatsApp</button>
+          <button onClick={() => window.print()} className="btn-secondary">⬇️ Save / Print</button>
+        </div>
+      </div>
+      <style>{`
+        .receipt-modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.72); display:flex; align-items:center; justify-content:center; padding:16px; overflow:auto; }
+        .receipt-modal { width:min(560px, 100%); max-height:96vh; background:var(--color-paper, #fff); border-radius:16px; overflow:hidden; box-shadow:0 25px 80px rgba(0,0,0,.35); }
+        .receipt-modal-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; background:var(--color-ink, #111); color:white; }
+        .receipt-modal-header h2 { font-size:16px; font-weight:600; margin:0; }
+        .receipt-modal-header button { font-size:28px; line-height:1; color:white; background:none; border:0; cursor:pointer; }
+        .receipt-paper { background:white; color:#111; margin:16px; padding:20px 18px; border-radius:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; box-shadow:0 2px 12px rgba(0,0,0,.12); max-height:70vh; overflow-y:auto; }
+        .receipt-brand { text-align:center; font-family: Georgia, serif; font-size:25px; font-weight:800; letter-spacing:.5px; }
+        .receipt-rule { text-align:center; overflow:hidden; white-space:nowrap; margin:5px 0; }
+        .receipt-tagline { text-align:center; font-size:14px; font-weight:600; }
+        .receipt-meta { line-height:1.7; margin:12px 0; }
+        .receipt-section-title { font-weight:800; margin-top:14px; }
+        .receipt-item { padding:8px 0; line-height:1.55; }
+        .receipt-item-name { font-weight:800; font-size:15px; }
+        .receipt-total, .receipt-payment { font-weight:800; line-height:1.8; }
+        .receipt-customer, .receipt-due { font-size:13px; margin-top:3px; }
+        .receipt-status { text-align:center; font-weight:900; font-size:16px; padding:6px 0; }
+        .receipt-status.received { color:#15803d; }
+        .receipt-status.pending { color:#c2410c; }
+        .receipt-contact { line-height:1.7; font-size:13px; }
+        .receipt-qr { display:block; width:145px; height:145px; object-fit:contain; margin:12px auto 8px; image-rendering:auto; }
+        .receipt-scan { text-align:center; font-size:12px; line-height:1.45; }
+        .receipt-thanks { text-align:center; font-weight:800; margin-top:8px; }
+        .receipt-thanks-sub { text-align:center; margin-top:4px; font-size:13px; }
+        .receipt-actions { display:flex; gap:8px; padding:0 16px 16px; }
+        .receipt-actions button { flex:1; min-height:42px; }
+        .receipt-whatsapp { border:0; border-radius:8px; background:#25D366; color:white; font-weight:600; padding:8px 12px; cursor:pointer; }
+        @media (max-width: 560px) { .receipt-actions { flex-wrap:wrap; } .receipt-actions button { min-width:calc(50% - 4px); } .receipt-actions button:last-child { min-width:100%; } }
+        @media print {
+          body * { visibility:hidden !important; }
+          .receipt-paper, .receipt-paper * { visibility:visible !important; }
+          .receipt-paper { position:absolute; left:0; top:0; width:100%; max-height:none; margin:0; box-shadow:none; border-radius:0; }
+          .no-print { background:white !important; box-shadow:none !important; position:static !important; width:100% !important; max-height:none !important; overflow:visible !important; }
+          .receipt-modal-header, .receipt-actions { display:none !important; }
+        }
+      `}</style>
+    </div>
+  )
 }
 
 async function pushSaleToServer(business, saleData) {
@@ -420,6 +562,7 @@ export default function Sell() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [lastReceipt, setLastReceipt] = useState(null)
+  const [showReceipt, setShowReceipt] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [pendingCount, setPendingCount] = useState(0)
   const [failedSales, setFailedSales] = useState([])
@@ -647,12 +790,20 @@ export default function Sell() {
       })),
     }
 
+    const receiptDate = saleData.sale_date ? new Date(saleData.sale_date) : new Date()
     const receiptData = {
-      businessName: business?.name || 'Shop',
+      businessName: BUSINESS_RECEIPT_CONFIG.name,
+      tagline: BUSINESS_RECEIPT_CONFIG.tagline,
+      location: BUSINESS_RECEIPT_CONFIG.location,
+      phone: BUSINESS_RECEIPT_CONFIG.phone,
+      tiktok: BUSINESS_RECEIPT_CONFIG.tiktok,
+      whatsapp: BUSINESS_RECEIPT_CONFIG.whatsapp,
       items: cart.map((i) => ({ name: displayName(i.item), quantity: i.quantity, unitPrice: unitPriceFor(i) })),
-      total, paymentMethod,
-      customerName: paymentMethod === 'credit' ? selectedCustomer.name : null,
-      date: saleData.sale_date ? new Date(saleData.sale_date) : new Date(),
+      total,
+      paymentMethod,
+      customerName: (paymentMethod === 'credit' || paymentMethod === 'installments') ? selectedCustomer?.name : null,
+      receiptNumber: getReceiptNumber(receiptDate),
+      date: receiptDate,
     }
 
     async function createInstallmentPlan(saleId) {
@@ -687,6 +838,7 @@ export default function Sell() {
         )
       }
       setLastReceipt(receiptData)
+      setShowReceipt(true)
       setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
       setShowCartDrawer(false)
       setBackdateAt(''); setShowBackdate(false)
@@ -698,6 +850,7 @@ export default function Sell() {
       setPendingCount(queueCount())
       setMessage(`📴 No connection — sale saved and will sync automatically (UGX ${total.toLocaleString()}).`)
       setLastReceipt(receiptData)
+      setShowReceipt(true)
       setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
       setShowCartDrawer(false)
       setBackdateAt(''); setShowBackdate(false)
@@ -1070,6 +1223,7 @@ export default function Sell() {
       />
 
       {scanning && <ScannerModal onResult={handleScan} onClose={() => setScanning(false)} />}
+      <ReceiptModal receipt={showReceipt ? lastReceipt : null} onClose={() => setShowReceipt(false)} />
     </>
   )
 }
