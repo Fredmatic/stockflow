@@ -27,6 +27,8 @@ const NAV_ITEMS = [
     { to: '/reminders', label: 'Reminders', icon: '⏰' },
     { to: '/staff', label: 'Staff', icon: '◍' },
     { to: '/reports', label: 'Reports', icon: '📊' },
+    { to: '/reports', label: 'Reports', icon: '📊' },
+    { to: '/business-info', label: 'Business Info', icon: '🏪' },
 ]
 
 export default function Layout() {

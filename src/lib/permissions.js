@@ -19,6 +19,7 @@ export const ROUTE_ACCESS = {
   '/staff': ['owner'],
   '/reports': ['owner'],
   '/reminders': ['owner'],
+  '/business-info': ['owner'],
 }
 
 export function canAccess(path, activeStaff) {

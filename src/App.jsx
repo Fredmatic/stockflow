@@ -23,6 +23,7 @@ import Expenses from './pages/Expenses'
 import Spending from './pages/Spending'
 import Reports from './pages/Reports'
 import Reminders from './pages/Reminders'
+import BusinessInfo from './pages/BusinessInfo'
 import SplashScreen from './components/SplashScreen'
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/reset-password']
@@ -148,6 +149,7 @@ export default function App() {
                 <Route path="/spending" element={<Restricted path="/spending"><Spending /></Restricted>} />
                 <Route path="/staff" element={<Restricted path="/staff"><Staff /></Restricted>} />
                 <Route path="/reports" element={<Restricted path="/reports"><Reports /></Restricted>} />
+                <Route path="/business-info" element={<Restricted path="/business-info"><BusinessInfo /></Restricted>} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Routes>
