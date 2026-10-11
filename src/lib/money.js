@@ -39,6 +39,10 @@ export function calcSaleProfit(saleItems) {
 export function summarizeServiceTickets(tickets) {
   return (tickets || []).reduce(
     (acc, t) => {
+      // Only finished work is revenue. Booked / in-progress / ready jobs and
+      // cancelled ones are not earned yet. Rows with no status (older data,
+      // or queries that don't select it) are treated as completed.
+      if (t.status && t.status !== 'completed') return acc
       const commission = Number(t.commission_amount) || 0
       const supply = Number(t.supply_cost) || 0
       const amount = Number(t.amount) || 0
@@ -61,4 +65,23 @@ export function calcNetProfit({ grossProfit, totalExpenses }) {
 /** Sums how much is owed across a list of debtor balances (never negative). */
 export function sumOwedBalance(debtors) {
   return (debtors || []).reduce((sum, d) => sum + Math.max(0, Number(d.balance) || 0), 0)
+}
+
+
+/** True when a service ticket counts as earned revenue (see summarizeServiceTickets). */
+export function isEarnedTicket(t) {
+  return !t?.status || t.status === 'completed'
+}
+
+/** Money still to collect on an open job: price minus any deposit already paid. */
+export function calcBalanceDue({ amount, depositAmount }) {
+  return Math.max(0, (Number(amount) || 0) - (Number(depositAmount) || 0))
+}
+
+/** Bulk / contractor price: the price to use for a quantity, given an optional bulk tier. */
+export function calcUnitPrice({ basePrice, bulkMinQty, bulkPrice, quantity }) {
+  const min = Number(bulkMinQty) || 0
+  const bulk = Number(bulkPrice) || 0
+  if (min > 0 && bulk > 0 && Number(quantity) >= min) return bulk
+  return Number(basePrice) || 0
 }

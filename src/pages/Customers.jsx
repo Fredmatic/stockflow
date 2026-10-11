@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { getProfile } from '../lib/businessTypes'
 import Spinner from '../components/Spinner'
 
 // Money collected from a customer paying down credit/installments is cash
@@ -147,10 +148,10 @@ export default function Customers() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-xl font-semibold">Customers</h1>
+          <h1 className="font-display text-xl font-semibold">{getProfile(business).vocab.customers}</h1>
           <p className="text-muted text-sm">Track who owes you and record payments.</p>
         </div>
-        <button onClick={() => setShowNew(true)} className="btn-primary">+ Add customer</button>
+        <button onClick={() => setShowNew(true)} className="btn-primary">+ Add {getProfile(business).vocab.customer.toLowerCase()}</button>
       </div>
 
       <div className="card px-4 py-4 flex items-center justify-between">
@@ -323,7 +324,7 @@ function NewCustomerForm({ business, onClose, onSaved }) {
           </label>
           <label className="block">
             <span className="text-xs font-medium text-muted mb-1 block">Note (optional)</span>
-            <input className="input" value={note} onChange={(e) => setNote(e.target.value)} />
+            <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={getProfile(business).vocab.customerNotePrompt} />
           </label>
           {error && <p className="text-brick text-sm">{error}</p>}
           <div className="flex gap-2 pt-2">

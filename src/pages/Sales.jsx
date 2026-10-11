@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import Spinner from '../components/Spinner'
+import { getProfile } from '../lib/businessTypes'
 function exportToCSV(sales, businessName) {
   const rows = [['Date', 'Time', 'Staff', 'Customer', 'Type', 'Items', 'Total (UGX)', 'Cost (UGX)', 'Profit (UGX)', 'Refunded']]
   sales.forEach(sale => {
@@ -71,6 +72,10 @@ function itemName(item) {
 
 export default function Sales() {
   const { business, activeStaff } = useAuth()
+  const profile = getProfile(business)
+  const metaLabels = Object.fromEntries(
+    profile.sale.fields.map((f) => [f.key, f.label.replace(/ \(optional\)$/, '')])
+  )
   const [range, setRange] = useState('today')
   const [sales, setSales] = useState([])
   const [expensesTotal, setExpensesTotal] = useState(0)
@@ -225,7 +230,7 @@ export default function Sales() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-display text-xl font-semibold">Sales</h1>
+        <h1 className="font-display text-xl font-semibold">{profile.vocab.sales}</h1>
         <p className="text-muted text-sm">Total revenue, items sold, and full sale history.</p>
       </div>
 
@@ -341,6 +346,14 @@ export default function Sales() {
                               </span>
                             )}
                           </div>
+                          {s.meta && Object.keys(s.meta).length > 0 && (
+                            <div className="text-xs text-muted mt-0.5">
+                              {Object.entries(s.meta)
+                                .filter(([, v]) => v)
+                                .map(([k, v]) => `${metaLabels[k] || k}: ${v}`)
+                                .join(' · ')}
+                            </div>
+                          )}
                         </div>
                         <div className="text-right">
                           <div className="font-mono text-sm font-semibold text-brand-dark">

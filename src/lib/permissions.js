@@ -20,6 +20,8 @@ export const ROUTE_ACCESS = {
   '/reports': ['owner'],
   '/reminders': ['owner'],
   '/business-info': ['owner'],
+  '/businesses': ['owner'],
+  '/stock-count': ['owner', 'staff'],
 }
 
 export function canAccess(path, activeStaff) {

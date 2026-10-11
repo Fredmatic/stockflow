@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import Spinner from '../components/Spinner'
 import BackdateControl from '../components/BackdateControl'
+import { getProfile } from '../lib/businessTypes'
 
 function displayName(item) {
   return item.variant_name ? `${item.product_name} — ${item.variant_name}` : item.product_name
@@ -22,6 +23,9 @@ export default function StockIn() {
   const [newSupplierName, setNewSupplierName] = useState('')
   const [newSupplierPhone, setNewSupplierPhone] = useState('')
   const [note, setNote] = useState('')
+  const [batchNo, setBatchNo] = useState('')
+  const [batchExpiry, setBatchExpiry] = useState('')
+  const trackExpiry = !!getProfile(business).products.expiry
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [showHistory, setShowHistory] = useState(false)
@@ -141,7 +145,7 @@ export default function StockIn() {
   async function loadProducts() {
     const { data } = await supabase
       .from('product_stock')
-      .select('product_id, variant_id, product_name, variant_name, sku, cost_price')
+      .select('product_id, variant_id, product_name, variant_name, sku, cost_price, quantity_on_hand')
       .eq('business_id', business.id)
     setItems(data || [])
   }
@@ -189,10 +193,23 @@ export default function StockIn() {
       quantity: Number(quantity),
       unit_cost: unitCost ? Number(unitCost) : null,
       supplier_id: supplierId || null,
-      note: note ? (backdateISO ? `${note} (backdated)` : note) : (backdateISO ? 'Backdated restock' : null),
+      note: [note, batchNo && `Batch ${batchNo}`, batchExpiry && `Exp ${batchExpiry}`].filter(Boolean).join(' · ') + (backdateISO ? ' (backdated)' : '') || null,
       staff_user_id: activeStaff?.id || null,
       ...(backdateISO ? { created_at: backdateISO } : {}),
     }).select().single()
+
+    // Expiry-sensitive stock (pharmacy, supermarket…): remember the batch. The product keeps
+    // the EARLIEST expiry still on hand, unless it had run out (then the new batch replaces it).
+    if (trackExpiry && batchExpiry) {
+      const { data: prod } = await supabase.from('products').select('attributes').eq('id', selected.product_id).single()
+      const attrs = { ...(prod?.attributes || {}) }
+      const hadStock = Number(selected.quantity_on_hand) > 0
+      if (!attrs.expiry_date || !hadStock || batchExpiry < attrs.expiry_date) {
+        attrs.expiry_date = batchExpiry
+        if (batchNo) attrs.batch_no = batchNo
+      }
+      await supabase.from('products').update({ attributes: attrs }).eq('id', selected.product_id)
+    }
 
     // If a cost was entered and differs from the product's current cost price, update it
     if (unitCost && Number(unitCost) > 0) {
@@ -235,6 +252,8 @@ export default function StockIn() {
     setUnitCost('')
     setSupplierId('')
     setNote('')
+    setBatchNo('')
+    setBatchExpiry('')
     setSearch('')
     setBackdateAt('')
     setShowBackdate(false)
@@ -413,6 +432,19 @@ export default function StockIn() {
               </div>
             )}
           </label>
+
+          {trackExpiry && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-xs font-medium text-muted mb-1 block">Batch no. (optional)</span>
+                <input className="input" value={batchNo} onChange={(e) => setBatchNo(e.target.value)} />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-muted mb-1 block">Expiry date of this batch</span>
+                <input type="date" className="input" value={batchExpiry} onChange={(e) => setBatchExpiry(e.target.value)} />
+              </label>
+            </div>
+          )}
 
           <label className="block">
             <span className="text-xs font-medium text-muted mb-1 block">Note (optional)</span>

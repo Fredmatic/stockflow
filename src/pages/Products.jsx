@@ -3,73 +3,11 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import Spinner from '../components/Spinner'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
+import { getProfile, expiryStatus, daysUntil } from '../lib/businessTypes'
 
-// Suggested categories & field hints per business type
-const BUSINESS_TEMPLATES = {
-  electronics: {
-    categories: ['Phones', 'Phone Cases', 'Screen Protectors', 'Chargers', 'Earphones', 'Cables', 'Tablets', 'Laptops', 'Accessories'],
-    itemLabel: 'Product',
-    hasVariants: true,
-    variantLabel: 'Type (e.g. Black 128GB, White 256GB)',
-    showWarranty: true,
-    showExpiry: false,
-    showServiceDuration: false,
-  },
-  supermarket: {
-    categories: ['Beverages', 'Bread & Bakery', 'Dairy', 'Snacks', 'Cooking Oil', 'Rice & Posho', 'Soap & Detergents', 'Toiletries', 'Vegetables', 'Meat & Fish'],
-    itemLabel: 'Item',
-    hasVariants: false,
-    showWarranty: false,
-    showExpiry: true,
-    showServiceDuration: false,
-  },
-  restaurant: {
-    categories: ['Food', 'Drinks', 'Juices', 'Specials', 'Breakfast', 'Lunch', 'Dinner', 'Desserts', 'Sides'],
-    itemLabel: 'Menu item',
-    hasVariants: true,
-    variantLabel: 'Size / option (e.g. Small, Large)',
-    showWarranty: false,
-    showExpiry: false,
-    showServiceDuration: false,
-  },
-  barbershop: {
-    categories: ['Haircut', 'Shaving', 'Beard Trim', 'Hair Treatment', 'Braiding', 'Weave', 'Manicure', 'Pedicure', 'Retail Products'],
-    itemLabel: 'Service or product',
-    hasVariants: false,
-    showWarranty: false,
-    showExpiry: false,
-    showServiceDuration: true,
-  },
-  clothing: {
-    categories: ['T-Shirts', 'Trousers', 'Dresses', 'Shoes', 'Skirts', 'Jackets', 'Suits', 'Underwear', 'Kids Wear', 'Accessories'],
-    itemLabel: 'Item',
-    hasVariants: true,
-    variantLabel: 'Size / colour (e.g. L Blue, M Red)',
-    showWarranty: false,
-    showExpiry: false,
-    showServiceDuration: false,
-  },
-  wholesale: {
-    categories: ['Beverages', 'Cooking Oil', 'Grains & Flour', 'Soap & Cleaning', 'Sugar & Salt', 'Confectionery', 'Toiletries', 'Stationery'],
-    itemLabel: 'Item',
-    hasVariants: false,
-    showWarranty: false,
-    showExpiry: true,
-    showServiceDuration: false,
-  },
-  retail: {
-    categories: ['General', 'Food & Drink', 'Household', 'Electronics', 'Clothing', 'Stationery', 'Other'],
-    itemLabel: 'Product',
-    hasVariants: false,
-    showWarranty: false,
-    showExpiry: false,
-    showServiceDuration: false,
-  },
-}
-
-function getTemplate(type) {
-  return BUSINESS_TEMPLATES[type] || BUSINESS_TEMPLATES['retail']
-}
+// What each kind of business sells, and what it needs to know about each item,
+// lives in lib/businessTypes.js (pharmacy: batch & expiry, phones: IMEI,
+// boutique: size & season, hardware: unit & contractor price…).
 
 export default function Products() {
   const { business } = useAuth()
@@ -77,6 +15,7 @@ export default function Products() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
   const [loading, setLoading] = useState(true)
+  const profile = getProfile(business)
 
   useEffect(() => {
     if (business) load()
@@ -136,25 +75,17 @@ export default function Products() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-xl font-semibold">Products</h1>
-          <p className="text-muted text-sm">
-            {business?.type === 'electronics' ? 'Phones, accessories & gadgets'
-              : business?.type === 'supermarket' ? 'Groceries & household items'
-                : business?.type === 'restaurant' ? 'Menu items & ingredients'
-                  : business?.type === 'barbershop' ? 'Services & products'
-                    : business?.type === 'clothing' ? 'Clothing & fashion items'
-                      : business?.type === 'wholesale' ? 'Wholesale inventory'
-                        : 'Your products & inventory'}
-          </p>
+          <h1 className="font-display text-xl font-semibold">{profile.vocab.products}</h1>
+          <p className="text-muted text-sm">{profile.vocab.productsSubtitle}</p>
         </div>
-        <button onClick={openNew} className="btn-primary">+ Add product</button>
+        <button onClick={openNew} className="btn-primary">+ Add {profile.vocab.product.toLowerCase()}</button>
       </div>
 
       {loading ? (
         <Spinner />
       ) : products.length === 0 ? (
         <p className="card px-4 py-8 text-center text-sm text-muted">
-          No products yet. Add your first one to start tracking stock.
+          No {profile.vocab.products.toLowerCase()} yet. Add your first one to get started.
         </p>
       ) : (
         <div className="card divide-y divide-line">
@@ -179,9 +110,13 @@ export default function Products() {
                       </span>
                     )}
                   </div>
-                  {p.category && (
-                    <div className="text-xs text-muted mt-0.5">
-                      <span className="bg-paper border border-line rounded px-1.5 py-0.5">{p.category}</span>
+                  {(p.category || p.attributes?.brand || p.attributes?.requires_prescription || p.attributes?.expiry_date || p.attributes?.track_stock === false) && (
+                    <div className="text-xs text-muted mt-0.5 flex flex-wrap gap-1">
+                      {p.category && <span className="bg-paper border border-line rounded px-1.5 py-0.5">{p.category}</span>}
+                      {p.attributes?.brand && <span className="bg-paper border border-line rounded px-1.5 py-0.5">{p.attributes.brand}</span>}
+                      {p.attributes?.requires_prescription && <span className="rounded px-1.5 py-0.5 bg-amber-light text-amber">Rx only</span>}
+                      {p.attributes?.track_stock === false && <span className="bg-paper border border-line rounded px-1.5 py-0.5">Made to order</span>}
+                      <ExpiryChip date={p.attributes?.expiry_date} warnDays={profile.products.expiry?.warnDays ?? 30} />
                     </div>
                   )}
                   <div className="text-xs text-muted">
@@ -216,6 +151,51 @@ export default function Products() {
   )
 }
 
+function ExpiryChip({ date, warnDays }) {
+  const status = expiryStatus(date, warnDays)
+  if (!status || status === 'ok') return null
+  const d = daysUntil(date)
+  return status === 'expired' ? (
+    <span className="rounded px-1.5 py-0.5 bg-brick-light text-brick">Expired</span>
+  ) : (
+    <span className="rounded px-1.5 py-0.5 bg-amber-light text-amber">Expires in {d} day{d === 1 ? '' : 's'}</span>
+  )
+}
+
+function ExtraField({ field, value, onChange }) {
+  if (field.type === 'checkbox') {
+    return (
+      <label className="flex items-start gap-2 text-sm py-1">
+        <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 mt-0.5" />
+        <span>
+          {field.label}
+          {field.hint && <span className="block text-xs text-muted">{field.hint}</span>}
+        </span>
+      </label>
+    )
+  }
+  return (
+    <Field label={field.label}>
+      {field.type === 'select' ? (
+        <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+          <option value="">—</option>
+          {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input
+          className="input"
+          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+          min={field.type === 'number' ? '0' : undefined}
+          value={value}
+          placeholder={field.placeholder || ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+      {field.hint && <span className="text-xs text-muted mt-1 block">{field.hint}</span>}
+    </Field>
+  )
+}
+
 function StatusLabel({ status }) {
   const map = {
     in_stock: { text: 'In stock', color: 'var(--color-brand-dark)' },
@@ -245,22 +225,18 @@ async function uploadProductImage(businessId, productId, file) {
 
 function ProductForm({ business, product, onClose, onSaved }) {
   const { activeStaff, setBusiness } = useAuth()
+  const profile = getProfile(business)
   const isElectronics = business?.type === 'electronics'
-  const isSupermarket = business?.type === 'supermarket'
-  const isRestaurant = business?.type === 'restaurant'
-  const isBarbershop = business?.type === 'barbershop'
-  const isClothing = business?.type === 'clothing'
-  const isWholesale = business?.type === 'wholesale'
   const isEditing = !!product
 
-  const [hasVariants, setHasVariants] = useState(product?.has_variants || false)
+  const [hasVariants, setHasVariants] = useState(product ? !!product.has_variants : profile.products.defaultVariants)
   const [variants, setVariants] = useState([]) // existing variants, when editing
   const [newVariantRows, setNewVariantRows] = useState([
     { key: tempId(), name: '', sub_name: '', cost_price: '', selling_price: '', starting_quantity: '' },
   ])
   const [loadingVariants, setLoadingVariants] = useState(isEditing && product?.has_variants)
 
-  const template = getTemplate(business?.type)
+  const template = profile.products
 
   const [form, setForm] = useState({
     name: product?.name || '',
@@ -271,11 +247,23 @@ function ProductForm({ business, product, onClose, onSaved }) {
     selling_price: product?.selling_price || '',
     reorder_level: product?.reorder_level ?? 5,
     starting_quantity: 0,
-    imei: product?.attributes?.imei || '',
-    warranty_months: product?.attributes?.warranty_months || '',
-    expiry_date: product?.attributes?.expiry_date || '',
-    service_duration_mins: product?.attributes?.service_duration_mins || '',
   })
+  // Extra details this kind of business tracks (batch no., IMEI, size, brand…).
+  // Existing values are kept even if a field is later removed from the profile.
+  const [extras, setExtras] = useState(() => {
+    const init = {}
+    for (const f of profile.products.fields) {
+      const existing = product?.attributes?.[f.key]
+      if (f.type === 'checkbox') {
+        // "Count in stock" is on unless it was explicitly switched off (older items have no value = counted).
+        if (f.key === 'track_stock') init[f.key] = product ? existing !== false : !!f.default
+        else init[f.key] = product ? !!existing : !!f.default
+      }
+      else init[f.key] = existing ?? ''
+    }
+    return init
+  })
+  const setExtra = (key, value) => setExtras((e) => ({ ...e, [key]: value }))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [imageFile, setImageFile] = useState(null)
@@ -404,15 +392,20 @@ function ProductForm({ business, product, onClose, onSaved }) {
     }
 
     setBusy(true)
-    const attributes = {}
-    if (isBarbershop && form.service_duration_mins) {
-      attributes.service_duration_mins = Number(form.service_duration_mins)
+    // Start from what the item already had so nothing is silently lost.
+    const attributes = { ...(product?.attributes || {}) }
+    for (const f of profile.products.fields) {
+      const v = extras[f.key]
+      if (f.type === 'checkbox') {
+        if (f.key === 'track_stock') attributes.track_stock = !!v // explicit true/false
+        else if (v) attributes[f.key] = true
+        else delete attributes[f.key]
+      } else if (v === '' || v === null || v === undefined) {
+        delete attributes[f.key]
+      } else {
+        attributes[f.key] = f.type === 'number' ? Number(v) : v
+      }
     }
-    if (isElectronics) {
-      if (form.imei) attributes.imei = form.imei
-      if (form.warranty_months) attributes.warranty_months = Number(form.warranty_months)
-    }
-    if (isSupermarket && form.expiry_date) attributes.expiry_date = form.expiry_date
 
     const payload = {
       business_id: business.id,
@@ -649,16 +642,9 @@ function ProductForm({ business, product, onClose, onSaved }) {
             }}
           />
 
-          <Field label={template.itemLabel + ' name'}>
+          <Field label={profile.vocab.product + ' name'}>
             <input required className="input" value={form.name} onChange={(e) => set('name', e.target.value)}
-              placeholder={
-                business?.type === 'electronics' ? 'e.g. Samsung A15, Screen Guard'
-                  : business?.type === 'restaurant' ? 'e.g. Chicken & Chips, Passion Juice'
-                    : business?.type === 'barbershop' ? 'e.g. Haircut, Beard Trim'
-                      : business?.type === 'clothing' ? 'e.g. Polo Shirt, Skinny Jeans'
-                        : business?.type === 'supermarket' || business?.type === 'wholesale' ? 'e.g. Cooking Oil 2L, Bread'
-                          : 'e.g. Product name'
-              }
+              placeholder={profile.vocab.namePlaceholder}
             />
           </Field>
 
@@ -695,7 +681,7 @@ function ProductForm({ business, product, onClose, onSaved }) {
               className="w-4 h-4"
             />
             <span>
-              {isElectronics ? 'Has types & phone models (e.g. Ceramic → Samsung A15)' : 'Has types/variants (e.g. Size, Colour)'}
+              {isElectronics ? 'Has types & phone models (e.g. Ceramic → Samsung A15)' : `Comes in different types (${template.variantLabel || 'e.g. Size, Colour'})`}
               {isEditing && <span className="text-muted text-xs"> — set when created</span>}
             </span>
           </label>
@@ -844,29 +830,9 @@ function ProductForm({ business, product, onClose, onSaved }) {
             </div>
           )}
 
-          {isBarbershop && (
-            <Field label="Service duration (minutes, optional)">
-              <input type="number" min="0" step="5" className="input" value={form.service_duration_mins}
-                onChange={(e) => set('service_duration_mins', e.target.value)} placeholder="e.g. 30" />
-            </Field>
-          )}
-
-          {isElectronics && !hasVariants && (
-            <>
-              <Field label="IMEI / Serial (optional)">
-                <input className="input font-mono" value={form.imei} onChange={(e) => set('imei', e.target.value)} />
-              </Field>
-              <Field label="Warranty (months)">
-                <input type="number" min="0" className="input" value={form.warranty_months} onChange={(e) => set('warranty_months', e.target.value)} />
-              </Field>
-            </>
-          )}
-
-          {isSupermarket && !hasVariants && (
-            <Field label="Expiry date">
-              <input type="date" className="input" value={form.expiry_date} onChange={(e) => set('expiry_date', e.target.value)} />
-            </Field>
-          )}
+          {profile.products.fields.map((f) => (
+            <ExtraField key={f.key} field={f} value={extras[f.key]} onChange={(v) => setExtra(f.key, v)} />
+          ))}
 
           {error && <p className="text-brick text-sm">{error}</p>}
 

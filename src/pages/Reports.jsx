@@ -191,7 +191,7 @@ export default function Reports() {
             supabase.from('sales').select('id,total_amount,is_refunded,created_at,sale_items(quantity,unit_price,unit_cost,products(name),product_variants(name))').eq('business_id', business.id).gte('created_at', startISO),
             supabase.from('expenses').select('amount,category').eq('business_id', business.id).gte('created_at', startISO),
             supabase.from('product_stock').select('quantity,reorder_point,unit_cost').eq('business_id', business.id),
-            supabase.from('service_tickets').select('amount,commission_amount,supply_cost,service_name,created_at').eq('business_id', business.id).gte('created_at', startISO),
+            supabase.from('service_tickets').select('amount,commission_amount,supply_cost,service_name,created_at,status').eq('business_id', business.id).eq('status', 'completed').gte('created_at', startISO),
         ])
 
         const validSales = (salesRaw || []).filter(s => !s.is_refunded)

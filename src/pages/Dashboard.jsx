@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import Spinner from '../components/Spinner'
 import BirthdayCountdown from '../components/BirthdayCountdown'
-import { calcSaleProfit, calcNetProfit, sumOwedBalance, summarizeServiceTickets } from '../lib/money'
+import { calcSaleProfit, calcNetProfit, sumOwedBalance, summarizeServiceTickets, calcBalanceDue } from '../lib/money'
+import { getProfile, servicesEnabled, getServicesProfile, expiryStatus, daysUntil } from '../lib/businessTypes'
 
 const ROUTE_LABELS = {
   '/products': 'Products',
@@ -25,6 +26,11 @@ export default function Dashboard() {
   const [totalOwed, setTotalOwed] = useState(0)
   const [netProfit, setNetProfit] = useState(0)
   const [loading, setLoading] = useState(true)
+  // Widgets that only some kinds of business need (expiry, open jobs, orders…)
+  const [extras, setExtras] = useState({ expiring: [], openJobs: [], staffToday: [], orders: null, slow: [] })
+  const profile = getProfile(business)
+  const widgets = profile.dashboard
+  const showServices = servicesEnabled(business)
 
   const canSeeRevenue = activeStaff?.role !== 'cashier'
   const canSeeNetProfit = activeStaff?.role === 'owner'
@@ -53,13 +59,14 @@ export default function Dashboard() {
         .limit(8),
       supabase
         .from('sales')
-        .select('total_amount, is_refunded')
+        .select('total_amount, is_refunded, meta')
         .eq('business_id', business.id)
         .gte('created_at', startOfToday.toISOString()),
       supabase
         .from('service_tickets')
-        .select('amount')
+        .select('amount, staff_user_id, tip_amount, staff_users(name)')
         .eq('business_id', business.id)
+        .eq('status', 'completed')
         .gte('created_at', startOfToday.toISOString()),
       supabase.from('debtor_summary').select('balance').eq('business_id', business.id),
     ])
@@ -76,6 +83,7 @@ export default function Dashboard() {
       count: activeSalesToday.length + (servicesToday || []).length,
     })
     setTotalOwed(sumOwedBalance(debtorsData))
+    await loadExtras(stockData || [], activeSalesToday, servicesToday || [])
 
     if (activeStaff?.role === 'owner') {
       const [{ data: monthSales }, { data: monthExpenses }, { data: monthServices }] = await Promise.all([
@@ -93,6 +101,7 @@ export default function Dashboard() {
           .from('service_tickets')
           .select('amount, commission_amount, supply_cost')
           .eq('business_id', business.id)
+          .eq('status', 'completed')
           .gte('created_at', startOfMonth.toISOString()),
       ])
       const grossProfit = (monthSales || [])
@@ -106,6 +115,92 @@ export default function Dashboard() {
     setLoading(false)
   }
 
+  // The cards that matter for THIS kind of business.
+  async function loadExtras(stockRows, salesToday, servicesToday) {
+    const next = { expiring: [], openJobs: [], staffToday: [], orders: null, slow: [] }
+
+    // Expiry: pharmacy, supermarket, wholesale… anything holding items that go off.
+    if (profile.products.expiry) {
+      const { data: prods } = await supabase
+        .from('products')
+        .select('id, name, attributes')
+        .eq('business_id', business.id)
+        .eq('is_active', true)
+      const onHand = {}
+      for (const r of stockRows) onHand[r.product_id] = (onHand[r.product_id] || 0) + Number(r.quantity_on_hand || 0)
+      const warn = profile.products.expiry.warnDays
+      next.expiring = (prods || [])
+        .filter((p) => p.attributes?.expiry_date && (onHand[p.id] || 0) > 0)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          date: p.attributes.expiry_date,
+          batch: p.attributes.batch_no,
+          qty: onHand[p.id],
+          status: expiryStatus(p.attributes.expiry_date, warn),
+          days: daysUntil(p.attributes.expiry_date),
+        }))
+        .filter((p) => p.status === 'expired' || p.status === 'soon')
+        .sort((a, b) => a.days - b.days)
+    }
+
+    // Open jobs / upcoming appointments
+    if (widgets.includes('openJobs') && showServices) {
+      const { data } = await supabase
+        .from('service_tickets')
+        .select('id, service_name, customer_name, status, scheduled_at, amount, deposit_amount, item_details')
+        .eq('business_id', business.id)
+        .in('status', ['booked', 'in_progress', 'ready'])
+        .order('scheduled_at', { ascending: true, nullsFirst: false })
+        .limit(6)
+      next.openJobs = data || []
+    }
+
+    // Who earned what today (barber / stylist leaderboard)
+    if (widgets.includes('serviceStaff') && showServices) {
+      const map = new Map()
+      for (const t of servicesToday) {
+        const key = t.staff_user_id || 'none'
+        if (!map.has(key)) map.set(key, { name: t.staff_users?.name || 'Unassigned', revenue: 0, tips: 0, count: 0 })
+        const r = map.get(key)
+        r.revenue += Number(t.amount)
+        r.tips += Number(t.tip_amount) || 0
+        r.count += 1
+      }
+      next.staffToday = [...map.values()].sort((a, b) => b.revenue - a.revenue)
+    }
+
+    // Orders today: restaurant / bar
+    if (widgets.includes('orders')) {
+      const total = salesToday.reduce((n, x) => n + Number(x.total_amount), 0)
+      const byType = {}
+      for (const x of salesToday) {
+        const t = x.meta?.order_type
+        if (t) byType[t] = (byType[t] || 0) + 1
+      }
+      next.orders = { count: salesToday.length, avg: salesToday.length ? total / salesToday.length : 0, byType }
+    }
+
+    // Slow movers: stock that hasn't sold for 30 days (money sitting on the shelf)
+    if (widgets.includes('slowMovers')) {
+      const since = new Date()
+      since.setDate(since.getDate() - 30)
+      const { data: sold } = await supabase
+        .from('sale_items')
+        .select('product_id, sales!inner(business_id, created_at)')
+        .eq('sales.business_id', business.id)
+        .gte('sales.created_at', since.toISOString())
+      const soldIds = new Set((sold || []).map((r) => r.product_id))
+      next.slow = stockRows
+        .filter((r) => Number(r.quantity_on_hand) > 0 && !soldIds.has(r.product_id))
+        .map((r) => ({ ...r, tied: Number(r.quantity_on_hand) * Number(r.cost_price || 0) }))
+        .sort((a, b) => b.tied - a.tied)
+        .slice(0, 6)
+    }
+
+    setExtras(next)
+  }
+
   const lowStock = stock.filter((p) => p.status === 'low_stock')
   const outOfStock = stock.filter((p) => p.status === 'out_of_stock')
   const inStock = stock.filter((p) => p.status === 'in_stock')
@@ -117,7 +212,7 @@ export default function Dashboard() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="font-display text-xl font-semibold">Dashboard</h1>
-          <p className="text-muted text-sm">A snapshot of your stock right now.</p>
+          <p className="text-muted text-sm">{profile.vocab.dashboardSubtitle}</p>
         </div>
         <BirthdayCountdown />
       </div>
@@ -166,6 +261,72 @@ export default function Dashboard() {
         </Link>
       )}
 
+      {extras.orders && (
+        <div className="card p-4">
+          <div className="text-xs text-muted mb-1">Today's orders</div>
+          <div className="flex items-baseline gap-4 flex-wrap">
+            <span className="font-mono text-2xl font-semibold text-brand-dark">{extras.orders.count}</span>
+            <span className="text-xs text-muted">average order UGX {Math.round(extras.orders.avg).toLocaleString()}</span>
+            {Object.entries(extras.orders.byType).map(([k, v]) => (
+              <span key={k} className="text-xs text-muted">{k}: {v}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {extras.staffToday.length > 0 && canSeeRevenue && (
+        <Section title={`Today by ${getServicesProfile(business).staffLabel.toLowerCase()}`} subtitle="Completed work so far today">
+          <div className="card divide-y divide-line">
+            {extras.staffToday.map((r) => (
+              <div key={r.name} className="flex items-center justify-between px-4 py-3 text-sm">
+                <div>
+                  <div className="font-medium">{r.name}</div>
+                  <div className="text-xs text-muted">{r.count} done{r.tips > 0 ? ` · tips UGX ${r.tips.toLocaleString()}` : ''}</div>
+                </div>
+                <div className="font-mono font-semibold">UGX {r.revenue.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {extras.openJobs.length > 0 && (
+        <Section title={getServicesProfile(business).workflow === 'booking' ? 'Upcoming appointments' : 'Open jobs'} subtitle="Booked or being worked on — tap to manage">
+          <Link to="/services" className="card divide-y divide-line block">
+            {extras.openJobs.map((j) => (
+              <div key={j.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{j.service_name} — {j.customer_name}</div>
+                  <div className="text-xs text-muted">
+                    {j.status === 'ready' ? 'Ready for pickup' : j.status === 'booked' ? 'Booked' : 'In progress'}
+                    {j.scheduled_at ? ` · ${new Date(j.scheduled_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : ''}
+                  </div>
+                </div>
+                <div className="font-mono text-xs shrink-0">owes UGX {calcBalanceDue({ amount: j.amount, depositAmount: j.deposit_amount }).toLocaleString()}</div>
+              </div>
+            ))}
+          </Link>
+        </Section>
+      )}
+
+      {extras.expiring.length > 0 && (
+        <Section title="Expiring soon" subtitle={`Items already expired or expiring within ${profile.products.expiry.warnDays} days — sell, return or remove them`}>
+          <div className="card divide-y divide-line">
+            {extras.expiring.map((e) => (
+              <div key={e.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{e.name}</div>
+                  <div className="text-xs text-muted">{e.qty} on hand{e.batch ? ` · batch ${e.batch}` : ''} · {e.date}</div>
+                </div>
+                <span className={`text-xs rounded px-2 py-0.5 shrink-0 ${e.status === 'expired' ? 'bg-brick-light text-brick' : 'bg-amber-light text-amber'}`}>
+                  {e.status === 'expired' ? `Expired ${Math.abs(e.days)}d ago` : `${e.days} day${e.days === 1 ? '' : 's'} left`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       <div className="grid grid-cols-3 gap-3">
         <SummaryCard label="In stock" value={inStock.length} color="brand" />
         <SummaryCard label="Low stock" value={lowStock.length} color="amber" />
@@ -183,6 +344,21 @@ export default function Dashboard() {
           </div>
         )}
       </Section>
+
+      {extras.slow.length > 0 && (
+        <Section title="Not selling" subtitle="In stock but nothing sold in the last 30 days — money sitting on the shelf">
+          <div className="card divide-y divide-line">
+            {extras.slow.map((r) => (
+              <div key={r.variant_id || r.product_id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <div className="font-medium truncate">{r.product_name}{r.variant_name ? ` — ${r.variant_name}` : ''}</div>
+                <div className="text-xs text-muted shrink-0">
+                  {r.quantity_on_hand} on hand{canSeeNetProfit && r.tied > 0 ? ` · UGX ${r.tied.toLocaleString()} tied up` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section title="Recent activity" subtitle="Last 8 stock movements">
         {recent.length === 0 ? (

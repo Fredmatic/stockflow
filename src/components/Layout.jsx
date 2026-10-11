@@ -12,24 +12,9 @@ import { queueCount } from '../lib/offlineQueue'
 import Calculator from './Calculator'
 import ReminderPopup from './ReminderPopup'
 import { ScannerModal, ScanIcon } from './Scanner'
+import BusinessSwitcher from './BusinessSwitcher'
+import { navItemsFor } from '../lib/businessTypes'
 
-const NAV_ITEMS = [
-    { to: '/dashboard', label: 'Dashboard', icon: '◧' },
-    { to: '/products', label: 'Products', icon: '▤' },
-    { to: '/stock-in', label: 'Stock In', icon: '↓' },
-    { to: '/sell', label: 'Sell', icon: '↑' },
-    { to: '/services', label: 'Customer Service', icon: '✂' },
-    { to: '/sales', label: 'Sales', icon: '◫' },
-    { to: '/customers', label: 'Customers', icon: '⊙' },
-    { to: '/lenders', label: 'People I Owe', icon: '◐' },
-    { to: '/expenses', label: 'Expenses', icon: '−' },
-    { to: '/spending', label: 'Spending', icon: '◆' },
-    { to: '/reminders', label: 'Reminders', icon: '⏰' },
-    { to: '/staff', label: 'Staff', icon: '◍' },
-    { to: '/reports', label: 'Reports', icon: '📊' },
-    { to: '/reports', label: 'Reports', icon: '📊' },
-    { to: '/business-info', label: 'Business Info', icon: '🏪' },
-]
 
 export default function Layout() {
     const { business, activeStaff, switchUser, signOut } = useAuth()
@@ -53,7 +38,10 @@ export default function Layout() {
     // Same bootstrap exception as App.jsx's <Restricted>: before anyone has
     // picked a staff member, /staff must still be reachable so the owner can
     // add the first team member at all.
-    const visibleNavItems = NAV_ITEMS.filter(
+    // The menu is built from the business's own profile: a salon sees
+    // Appointments, a pharmacy sees Medicines & Dispense, a restaurant sees
+    // Menu & Orders — each in the order that matters for that business.
+    const visibleNavItems = navItemsFor(business).filter(
         (item) => (item.to === '/staff' && !activeStaff) || canAccess(item.to, activeStaff)
     )
 
@@ -97,25 +85,6 @@ export default function Layout() {
         async function checkOverdue() {
             const today = new Date().toISOString().split('T')[0]
             const { data } = await supabase
-                .from('customers')
-                .select('id')
-                .eq('business_id', business.id)
-                .eq('is_active', true)
-                .lt('payment_due_date', today)
-                .not('payment_due_date', 'is', null)
-            setOverdueCount((data || []).length)
-
-            checkOverdue()
-            const interval = setInterval(checkOverdue, 60000)
-            return () => clearInterval(interval)
-        }
-    }, [business])
-
-    useEffect(() => {
-        if (!business) return
-        async function checkOverdue() {
-            const today = new Date().toISOString().split('T')[0]
-            const { data } = await supabase
                 .from('debtor_summary')
                 .select('customer_id, balance')
                 .eq('business_id', business.id)
@@ -139,13 +108,28 @@ export default function Layout() {
         return () => clearInterval(interval)
     }, [business])
 
+    useEffect(() => {
+        if (!business || activeStaff?.role !== 'owner') {
+            setOverdueLenderCount(0)
+            return
+        }
+        const today = new Date().toISOString().split('T')[0]
+        supabase
+            .from('lender_summary')
+            .select('lender_id')
+            .eq('business_id', business.id)
+            .gt('balance', 0)
+            .lt('due_date', today)
+            .then(({ data }) => setOverdueLenderCount((data || []).length))
+    }, [business, activeStaff?.role])
+
     return (
         <div className="min-h-screen flex">
             {/* Sidebar — desktop */}
             <aside className="hidden md:flex w-56 flex-col border-r border-line bg-paper-raised">
                 <div className="px-5 py-5 ledger-rule">
-                    <div className="font-display font-semibold text-brand-dark">StockTracer</div>
-                    <div className="text-xs text-muted mt-0.5 truncate">{business?.name}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted mb-1">StockTracer</div>
+                    <BusinessSwitcher />
                 </div>
                 <nav className="flex-1 px-3 py-4 space-y-1">
                     {visibleNavItems.map((item) => (
@@ -180,9 +164,8 @@ export default function Layout() {
             {/* Main content */}
             <div className="flex-1 flex flex-col">
                 <header className="safe-top md:hidden sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-line bg-paper-raised">
-                    <div>
-                        <div className="font-display font-semibold text-brand-dark text-sm">StockTracer</div>
-                        <div className="text-xs text-muted">{business?.name}</div>
+                    <div className="min-w-0 flex-1 mr-3">
+                        <BusinessSwitcher compact />
                     </div>
                     <div className="relative">
                         <button

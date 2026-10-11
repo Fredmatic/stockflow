@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { getProfile } from '../lib/businessTypes'
 import Spinner from '../components/Spinner'
 import BackdateControl from '../components/BackdateControl'
 import ProLock from '../components/ProLock'
@@ -78,8 +79,16 @@ export default function Expenses() {
         list.push(c)
       }
     }
-    return list.slice(0, 8)
-  }, [expenses])
+    // Then the running costs typical for THIS kind of business (a pharmacy's
+    // licence & expiry write-offs, a restaurant's gas & ingredients…).
+    for (const c of getProfile(business).expenses) {
+      if (!seen.has(c.toLowerCase())) {
+        seen.add(c.toLowerCase())
+        list.push(c)
+      }
+    }
+    return list.slice(0, 30)
+  }, [expenses, business])
 
   const total = useMemo(() => expenses.reduce((sum, e) => sum + Number(e.amount), 0), [expenses])
 
@@ -150,7 +159,7 @@ export default function Expenses() {
           </label>
           {knownCategories.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              {knownCategories.slice(0, 5).map((c) => (
+              {knownCategories.slice(0, 10).map((c) => (
                 <button
                   key={c}
                   type="button"

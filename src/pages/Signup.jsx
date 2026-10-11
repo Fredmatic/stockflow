@@ -2,21 +2,10 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import '../styles/auth-card.css'
+import BusinessTypePicker from '../components/BusinessTypePicker'
 
 const STEPS = ['Your business', 'Your account', 'Done']
 
-const BUSINESS_TYPES = [
-  { value: 'retail', label: '🛍 Retail shop' },
-  { value: 'electronics', label: '📱 Electronics / Phones' },
-  { value: 'supermarket', label: '🛒 Supermarket / Grocery' },
-  { value: 'restaurant', label: '🍽 Restaurant / Cafe' },
-  { value: 'barbershop', label: '💈 Barbershop / Salon' },
-  { value: 'clothing', label: '👗 Clothing / Fashion' },
-  { value: 'wholesale', label: '📦 Wholesale / Distributor' },
-  { value: 'pharmacy', label: '💊 Pharmacy' },
-  { value: 'hardware', label: '🔨 Hardware store' },
-  { value: 'other', label: '🏪 Other' },
-]
 
 export default function Signup() {
   const navigate = useNavigate()
@@ -133,19 +122,8 @@ export default function Signup() {
               </label>
 
               <label className="auth-field">
-                <span className="auth-field-label">Type of business</span>
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                  {BUSINESS_TYPES.map((t) => (
-                    <button
-                      key={t.value}
-                      type="button"
-                      onClick={() => setBusinessType(t.value)}
-                      className={`auth-chip ${businessType === t.value ? 'auth-chip--active' : ''}`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
+                <span className="auth-field-label">What kind of business is it?</span>
+                <BusinessTypePicker value={businessType} onChange={setBusinessType} variant="dark" />
               </label>
 
               <button
@@ -231,7 +209,7 @@ export default function Signup() {
                   <div className="text-4xl mb-3">🎉</div>
                   <h2 className="font-semibold text-lg mb-2">You're all set!</h2>
                   <p className="auth-muted text-sm">
-                    <strong style={{ color: '#E7EDE9' }}>{businessName}</strong> is ready. Start by adding your products and staff.
+                    <strong style={{ color: '#E7EDE9' }}>{businessName}</strong> is ready. You can add more businesses later from the menu — each gets the tools it needs.
                   </p>
                 </>
               )}

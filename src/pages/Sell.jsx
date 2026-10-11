@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { ScannerModal, ScanIcon } from '../components/Scanner'
 import BackdateControl from '../components/BackdateControl'
 import { enqueueSale, getQueue, removeFromQueue, markSyncFailed, getFailedSales, clearFailedSales, queueCount } from '../lib/offlineQueue'
+import SaleMetaFields, { initialSaleMeta, validateSaleMeta, cleanSaleMeta } from '../components/SaleMetaFields'
+import { getProfile, isStockTracked, priceForQuantity } from '../lib/businessTypes'
 
 function lineId(item) {
   return item.variant_id || item.product_id
@@ -57,6 +59,15 @@ function getWhatsAppQrUrl(business) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(waLink)}`
 }
 
+// Table number, patient, delivery… printed on the receipt when the business asked for them.
+function receiptExtraLines(business, meta) {
+  const lines = []
+  for (const f of getProfile(business).sale.fields) {
+    if (meta?.[f.key]) lines.push(`${f.label.replace(/ \(optional\)$/, '').replace(/ \*$/, '')}: ${meta[f.key]}`)
+  }
+  return lines
+}
+
 function buildReceiptText(receipt) {
   const lines = []
   lines.push(`*${receipt.businessName}*`)
@@ -77,6 +88,7 @@ function buildReceiptText(receipt) {
   lines.push(`*💰 TOTAL: UGX ${receipt.total.toLocaleString()}*`)
   lines.push(`💳 Payment: ${receipt.paymentMethod === 'cash' ? 'Cash' : receipt.paymentMethod === 'credit' ? 'On Credit' : 'Installments'}`)
   if (receipt.customerName) lines.push(`Customer: ${receipt.customerName}`)
+  ;(receipt.extraLines || []).forEach((l) => lines.push(l))
   lines.push('')
   lines.push(receipt.paymentMethod === 'cash' ? '🟢 PAYMENT RECEIVED' : receipt.paymentMethod === 'credit' ? '🟠 PAYMENT PENDING' : '🟠 PAYMENT PLAN')
   if (receipt.paymentMethod !== 'cash') lines.push(`Amount Due: UGX ${receipt.total.toLocaleString()}`)
@@ -146,6 +158,7 @@ function ReceiptModal({ receipt, onClose }) {
 
           <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
           <div className="receipt-total">💰 TOTAL: UGX {receipt.total.toLocaleString()}</div>
+          {(receipt.extraLines || []).map((l) => <div key={l} className="receipt-payment">{l}</div>)}
           <div className="receipt-payment">💳 Payment: {receipt.paymentMethod === 'cash' ? 'Cash' : receipt.paymentMethod === 'credit' ? 'On Credit' : 'Installments'}</div>
           {receipt.customerName && <div className="receipt-customer">Customer: {receipt.customerName}</div>}
           <div className="receipt-rule">━━━━━━━━━━━━━━━━━━</div>
@@ -222,6 +235,15 @@ function ReceiptModal({ receipt, onClose }) {
   )
 }
 
+// Items made to order (a restaurant dish) aren't counted in stock, so they
+// can always be sold and never produce a stock movement.
+function isUntracked(item) {
+  return !isStockTracked(item?.attributes)
+}
+function availableOf(item) {
+  return isUntracked(item) ? Infinity : item?.quantity_on_hand ?? 0
+}
+
 async function pushSaleToServer(business, saleData) {
   const productIds = saleData.items.filter((i) => !i.variant_id).map((i) => i.product_id)
   const variantIds = saleData.items.filter((i) => i.variant_id).map((i) => i.variant_id)
@@ -247,6 +269,7 @@ async function pushSaleToServer(business, saleData) {
 
   const stockShortfalls = []
   for (const item of saleData.items) {
+    if (item.untracked) continue
     const key = item.variant_id || item.product_id
     const stockRow = currentStock.find((s) => (s.variant_id || s.product_id) === key)
     const available = stockRow?.quantity_on_hand ?? 0
@@ -263,6 +286,7 @@ async function pushSaleToServer(business, saleData) {
       total_amount: saleData.total,
       is_credit: saleData.is_credit,
       customer_id: saleData.customer_id,
+      meta: saleData.meta || {},
       ...(saleData.sale_date ? { created_at: new Date(saleData.sale_date).toISOString() } : {}),
     })
     .select()
@@ -280,7 +304,7 @@ async function pushSaleToServer(business, saleData) {
   const { error: itemsError } = await supabase.from('sale_items').insert(saleItems)
   if (itemsError) throw itemsError
 
-  const movements = saleData.items.map((i) => ({
+  const movements = saleData.items.filter((i) => !i.untracked).map((i) => ({
     product_id: i.product_id,
     variant_id: i.variant_id || null,
     business_id: business.id,
@@ -290,8 +314,10 @@ async function pushSaleToServer(business, saleData) {
     note: `Sale ${sale.id}${saleData.queuedOffline ? ' (synced from offline)' : ''}${saleData.sale_date ? ' (backdated)' : ''}`,
     ...(saleData.sale_date ? { created_at: new Date(saleData.sale_date).toISOString() } : {}),
   }))
-  const { error: moveError } = await supabase.from('stock_movements').insert(movements)
-  if (moveError) throw moveError
+  if (movements.length > 0) {
+    const { error: moveError } = await supabase.from('stock_movements').insert(movements)
+    if (moveError) throw moveError
+  }
 
   if (saleData.is_credit) {
     const { error: debtError } = await supabase.from('debt_transactions').insert({
@@ -338,6 +364,9 @@ function CartDrawer({
   newCustomerName, setNewCustomerName, newCustomerPhone, setNewCustomerPhone,
   createCustomer, customerBusy, completeSale, busy, message, lastReceipt,
   isOwner, showBackdate, setShowBackdate, backdateAt, setBackdateAt,
+  business, saleMeta, setSaleMeta, hasRx,
+  installmentAmount, setInstallmentAmount, installmentFrequency, setInstallmentFrequency,
+  installmentFirstDue, setInstallmentFirstDue,
 }) {
   if (!open) return null
   return (
@@ -375,7 +404,7 @@ function CartDrawer({
               const isManual = i.manualPrice !== null && i.manualPrice !== undefined
               const unitPrice = unitPriceFor(i)
               const lineProfit = i.quantity * (unitPrice - (i.item.cost_price || 0))
-              const available = i.item.quantity_on_hand ?? 0
+              const available = availableOf(i.item)
               const atMax = i.quantity >= available
               return (
                 <div key={id} className="px-4 py-3 space-y-2">
@@ -409,6 +438,8 @@ function CartDrawer({
               )
             })}
           </div>
+
+          <SaleMetaFields business={business} meta={saleMeta} setMeta={setSaleMeta} hasRx={hasRx} />
 
           {/* Payment method */}
           <div className="mb-4">
@@ -617,6 +648,9 @@ export default function Sell() {
   const [showBackdate, setShowBackdate] = useState(false)
   const isOwner = activeStaff?.role === 'owner'
 
+  const profile = getProfile(business)
+  const [saleMeta, setSaleMeta] = useState(() => initialSaleMeta(business))
+
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [installmentAmount, setInstallmentAmount] = useState('')
   const [installmentFrequency, setInstallmentFrequency] = useState('monthly')
@@ -629,13 +663,27 @@ export default function Sell() {
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
   const [customerBusy, setCustomerBusy] = useState(false)
 
+  // Start a clean till whenever the owner switches to another business.
+  useEffect(() => {
+    setCart([])
+    setSaleMeta(initialSaleMeta(business))
+    setSelectedCustomer(null)
+  }, [business?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (business) {
-      supabase
-        .from('product_stock')
-        .select('product_id, variant_id, product_name, variant_name, sku, barcode, selling_price, cost_price, quantity_on_hand')
-        .eq('business_id', business.id)
-        .then(({ data }) => setItems(data || []))
+      setItems([])
+      Promise.all([
+        supabase
+          .from('product_stock')
+          .select('product_id, variant_id, product_name, variant_name, sku, barcode, selling_price, cost_price, quantity_on_hand')
+          .eq('business_id', business.id),
+        supabase.from('products').select('id, attributes').eq('business_id', business.id).eq('is_active', true),
+      ]).then(([{ data }, { data: prods }]) => {
+        // Each item carries its product's details (prescription flag, contractor price, made-to-order…).
+        const attrs = Object.fromEntries((prods || []).map((p) => [p.id, p.attributes || {}]))
+        setItems((data || []).map((row) => ({ ...row, attributes: attrs[row.product_id] || {} })))
+      })
       loadCustomers()
     }
   }, [business])
@@ -657,7 +705,9 @@ export default function Sell() {
   async function syncOfflineQueue() {
     if (!business || syncing) return
     // Only try entries that haven't permanently failed
-    const queue = getQueue().filter(e => !e.permanentlyFailed)
+    // Only this business's queued sales — never push a sale into the wrong business.
+    // (Entries queued before multi-business support have no id and belong to the first business.)
+    const queue = getQueue().filter(e => !e.permanentlyFailed && (!e.saleData?.business_id || e.saleData.business_id === business.id))
     if (queue.length === 0) {
       setFailedSales(getFailedSales())
       return
@@ -736,7 +786,7 @@ export default function Sell() {
 
   function addToCart(item) {
     const hasPrice = Number(item.selling_price) > 0
-    const available = item.quantity_on_hand ?? 0
+    const available = availableOf(item)
     let added = false
     setCart((c) => {
       const existing = c.find((i) => lineId(i.item) === lineId(item))
@@ -765,14 +815,15 @@ export default function Sell() {
 
   function unitPriceFor(i) {
     if (i.manualPrice !== null && i.manualPrice !== undefined) return Number(i.manualPrice) || 0
-    return Number(i.item.selling_price) || 0
+    // Hardware / wholesale: buying enough automatically switches to the bulk price.
+    return priceForQuantity(i.item.selling_price, i.item.attributes, i.quantity)
   }
 
   function handleScan(code) {
     const match = items.find((p) => p.barcode && p.barcode === code)
     setScanning(false)
     if (match) {
-      const available = match.quantity_on_hand ?? 0
+      const available = availableOf(match)
       const inCart = cart.find((i) => lineId(i.item) === lineId(match))
       if ((inCart?.quantity ?? 0) >= available) {
         setScanMessage(`${displayName(match)} is out of stock.`)
@@ -790,13 +841,15 @@ export default function Sell() {
     setCart((c) =>
       c.map((i) => {
         if (lineId(i.item) !== id) return i
-        const available = i.item.quantity_on_hand ?? 0
+        const available = availableOf(i.item)
         if (qty > available) { setMessage(`Error: only ${available} in stock.`); return i }
         return { ...i, quantity: qty }
       }).filter((i) => i.quantity > 0)
     )
   }
 
+  // A pharmacy cart containing a prescription-only medicine needs the patient's name.
+  const hasRx = cart.some((i) => i.item.attributes?.requires_prescription)
   const total = cart.reduce((sum, i) => sum + i.quantity * unitPriceFor(i), 0)
   const totalProfit = cart.reduce((sum, i) => sum + i.quantity * (unitPriceFor(i) - (i.item.cost_price || 0)), 0)
   const totalQty = cart.reduce((sum, i) => sum + i.quantity, 0)
@@ -805,11 +858,16 @@ export default function Sell() {
     if (cart.length === 0) return
     const missingPrice = cart.find((i) => unitPriceFor(i) <= 0)
     if (missingPrice) { setMessage(`Error: enter a price for ${displayName(missingPrice.item)}.`); return }
+    const metaError = validateSaleMeta(business, saleMeta, hasRx)
+    if (metaError) { setMessage(`Error: ${metaError}`); return }
     if ((paymentMethod === 'credit' || paymentMethod === 'installments') && !selectedCustomer) { setMessage('Error: pick or add a customer.'); return }
     if (paymentMethod === 'installments' && (!installmentAmount || !installmentFirstDue)) { setMessage('Error: fill in installment amount and first due date.'); return }
     setBusy(true)
 
+    const meta = cleanSaleMeta(business, saleMeta, hasRx)
     const saleData = {
+      business_id: business.id,
+      meta,
       staff_user_id: activeStaff?.id || null,
       total,
       is_credit: paymentMethod === 'credit' || paymentMethod === 'installments',
@@ -823,6 +881,7 @@ export default function Sell() {
         quantity: i.quantity,
         unit_price: unitPriceFor(i),
         unit_cost: i.item.cost_price || 0,
+        untracked: isUntracked(i.item),
       })),
     }
 
@@ -841,6 +900,7 @@ export default function Sell() {
       total,
       paymentMethod,
       customerName: (paymentMethod === 'credit' || paymentMethod === 'installments') ? selectedCustomer?.name : null,
+      extraLines: receiptExtraLines(business, meta),
       receiptNumber: getReceiptNumber(business, receiptDate),
       date: receiptDate,
     }
@@ -878,7 +938,7 @@ export default function Sell() {
       }
       setLastReceipt(receiptData)
       setShowReceipt(true)
-      setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
+      setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch(''); setSaleMeta(initialSaleMeta(business))
       setShowCartDrawer(false)
       setBackdateAt(''); setShowBackdate(false)
       setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
@@ -890,7 +950,7 @@ export default function Sell() {
       setMessage(`📴 No connection — sale saved and will sync automatically (UGX ${total.toLocaleString()}).`)
       setLastReceipt(receiptData)
       setShowReceipt(true)
-      setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch('')
+      setCart([]); setPaymentMethod('cash'); setSelectedCustomer(null); setCustomerSearch(''); setSaleMeta(initialSaleMeta(business))
       setShowCartDrawer(false)
       setBackdateAt(''); setShowBackdate(false)
       setTimeout(() => { setMessage(''); setLastReceipt(null) }, 15000)
@@ -956,7 +1016,7 @@ export default function Sell() {
 
         {/* ── Products column ── */}
         <div>
-          <h1 className="font-display text-xl font-semibold mb-1">Sell</h1>
+          <h1 className="font-display text-xl font-semibold mb-1">{profile.vocab.sell}</h1>
           <p className="text-muted text-sm mb-4">Tap a product to add it to the sale.</p>
 
           {message && (
@@ -985,7 +1045,8 @@ export default function Sell() {
 
           <div className="card divide-y divide-line overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
             {filtered.map((p) => {
-              const qty = p.quantity_on_hand ?? 0
+              const untracked = isUntracked(p)
+              const qty = untracked ? Infinity : p.quantity_on_hand ?? 0
               const noPrice = !p.selling_price || Number(p.selling_price) <= 0
               const justAdded = justAddedId === lineId(p)
               const inCart = cart.find(i => lineId(i.item) === lineId(p))
@@ -1000,7 +1061,7 @@ export default function Sell() {
                         ? <span className="text-brick">No saved price</span>
                         : `UGX ${Number(p.selling_price).toLocaleString()}`
                       }
-                      {' · '}{qty} in stock
+                      {untracked ? '' : <>{' · '}{qty} in stock</>}
                       {inCart && <span className="ml-2 text-brand font-semibold">(in cart: {inCart.quantity})</span>}
                     </div>
                   </div>
@@ -1044,7 +1105,7 @@ export default function Sell() {
                 const isManual = i.manualPrice !== null && i.manualPrice !== undefined
                 const unitPrice = unitPriceFor(i)
                 const lineProfit = i.quantity * (unitPrice - (i.item.cost_price || 0))
-                const available = i.item.quantity_on_hand ?? 0
+                const available = availableOf(i.item)
                 const atMax = i.quantity >= available
                 return (
                   <div key={id} className="px-4 py-3 space-y-2">
@@ -1081,6 +1142,7 @@ export default function Sell() {
 
           {cart.length > 0 && (
             <div className="mb-4">
+              <SaleMetaFields business={business} meta={saleMeta} setMeta={setSaleMeta} hasRx={hasRx} />
               <div className="text-xs font-medium text-muted mb-2">Payment</div>
               <div className="flex gap-2 mb-2">
                 <button type="button" onClick={() => setPaymentMethodSafe('cash')}
@@ -1236,6 +1298,16 @@ export default function Sell() {
         totalProfit={totalProfit}
         paymentMethod={paymentMethod}
         setPaymentMethodSafe={setPaymentMethodSafe}
+        installmentAmount={installmentAmount}
+        setInstallmentAmount={setInstallmentAmount}
+        installmentFrequency={installmentFrequency}
+        setInstallmentFrequency={setInstallmentFrequency}
+        installmentFirstDue={installmentFirstDue}
+        setInstallmentFirstDue={setInstallmentFirstDue}
+        business={business}
+        saleMeta={saleMeta}
+        setSaleMeta={setSaleMeta}
+        hasRx={hasRx}
         selectedCustomer={selectedCustomer}
         setSelectedCustomer={setSelectedCustomer}
         customers={customers}

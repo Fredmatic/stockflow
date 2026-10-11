@@ -191,3 +191,21 @@ iOS Safari only supports web push for PWAs added to the Home Screen (iOS
 16.4+), not for a normal Safari tab. The UI already shows a note about this
 when `push.supported` is false, but it's worth confirming your target
 owners are comfortable doing that install step.
+---
+
+## Several businesses, one login
+
+One owner login can run any number of businesses (a salon, a hardware store, a restaurant…).
+Use the business name at the top of the menu to switch, or **My Businesses** for a side-by-side
+view of today's takings. Each business has its own stock, sales, staff, PINs and reports.
+
+## Every kind of business works differently
+
+How each business type behaves lives in ONE file: `src/lib/businessTypes.js`
+(menus, wording, product fields, till questions, services workflow, expense categories, dashboard cards).
+To add or tune a business type, edit that file — no page needs to change.
+
+## Database update
+
+Run `supabase/migrations/015_multi_business_and_business_types.sql` in the Supabase SQL Editor
+**before** deploying this version.

@@ -24,6 +24,8 @@ import Spending from './pages/Spending'
 import Reports from './pages/Reports'
 import Reminders from './pages/Reminders'
 import BusinessInfo from './pages/BusinessInfo'
+import Businesses from './pages/Businesses'
+import StockCount from './pages/StockCount'
 import SplashScreen from './components/SplashScreen'
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/reset-password']
@@ -150,6 +152,8 @@ export default function App() {
                 <Route path="/staff" element={<Restricted path="/staff"><Staff /></Restricted>} />
                 <Route path="/reports" element={<Restricted path="/reports"><Reports /></Restricted>} />
                 <Route path="/business-info" element={<Restricted path="/business-info"><BusinessInfo /></Restricted>} />
+                <Route path="/businesses" element={<Restricted path="/businesses"><Businesses /></Restricted>} />
+                <Route path="/stock-count" element={<Restricted path="/stock-count"><StockCount /></Restricted>} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Routes>
