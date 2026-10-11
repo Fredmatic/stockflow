@@ -5,6 +5,10 @@ import { useAuth } from '../context/AuthContext'
 import Spinner from '../components/Spinner'
 import BirthdayCountdown from '../components/BirthdayCountdown'
 import { calcSaleProfit, calcNetProfit, sumOwedBalance, summarizeServiceTickets, calcBalanceDue } from '../lib/money'
+<<<<<<< HEAD
+=======
+import WhatsAppReportButton from '../components/WhatsAppReportButton'
+>>>>>>> f61ec8e (new feature)
 import { getProfile, servicesEnabled, getServicesProfile, expiryStatus, daysUntil } from '../lib/businessTypes'
 
 const ROUTE_LABELS = {
@@ -216,6 +220,8 @@ export default function Dashboard() {
         </div>
         <BirthdayCountdown />
       </div>
+
+      {canSeeNetProfit && <WhatsAppReportButton businesses={[business]} />}
 
       {blockedFrom && (
         <p className="text-sm text-brick bg-brick-light rounded-md px-3 py-2">

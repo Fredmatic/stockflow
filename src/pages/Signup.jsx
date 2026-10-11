@@ -3,6 +3,10 @@ import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import '../styles/auth-card.css'
 import BusinessTypePicker from '../components/BusinessTypePicker'
+<<<<<<< HEAD
+=======
+import { savePendingBusiness } from '../lib/pendingBusiness'
+>>>>>>> f61ec8e (new feature)
 
 const STEPS = ['Your business', 'Your account', 'Done']
 
@@ -38,8 +42,10 @@ export default function Signup() {
       }
 
       if (!data.session) {
-        // Email confirmation required — business row can't be created yet
-        // (RLS blocks it until the session exists). Show the confirmation step.
+        // Email confirmation required — the business can't be saved yet (the database
+        // needs a signed-in user). Keep the details here; AuthContext creates the
+        // business automatically on the first sign-in with this email.
+        savePendingBusiness({ email, name: businessName, type: businessType, ownerName })
         setNeedsConfirmation(true)
         setStep(2)
         setBusy(false)

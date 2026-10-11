@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { getProfile } from '../lib/businessTypes'
+<<<<<<< HEAD
+=======
+import { normalizePhone } from '../lib/whatsapp'
+>>>>>>> f61ec8e (new feature)
 import Spinner from '../components/Spinner'
 
 // Money collected from a customer paying down credit/installments is cash
@@ -23,14 +27,6 @@ async function creditCapitalBalance(business, setBusiness, amount, note, staffId
   setBusiness((prev) => (prev ? { ...prev, capital_balance: newBalance } : prev))
 }
 import { canAccess } from '../lib/permissions'
-
-function normalizePhone(phone) {
-  if (!phone) return null
-  let digits = phone.replace(/[^\d+]/g, '')
-  if (digits.startsWith('0')) digits = '256' + digits.slice(1) // Uganda default
-  if (digits.startsWith('+')) digits = digits.slice(1)
-  return digits
-}
 
 function buildReminderMessage(customer, business) {
   const status = getDeadlineStatus(customer.payment_due_date)

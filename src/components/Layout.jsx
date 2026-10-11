@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -229,7 +229,10 @@ export default function Layout() {
                             <a href="/lenders" className="ml-auto underline text-xs">View</a>
                         </div>
                     )}
-                    <Outlet />
+                    {/* The menu stays put while a screen's code loads */}
+                    <Suspense fallback={<div className="py-16 flex justify-center"><div className="w-6 h-6 rounded-full border-2 border-line border-t-brand-dark animate-spin" /></div>}>
+                        <Outlet />
+                    </Suspense>
                 </main>
 
                 {/* Bottom tab bar — mobile */}

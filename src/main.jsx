@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import ErrorBoundary from './components/ErrorBoundary'
+import { installGlobalErrorHandlers } from './lib/errorLog'
+
+installGlobalErrorHandlers()
 
 // Apply the saved/system theme before React mounts, so there's no flash of
 // the wrong theme on load (dark mode is just a class on <html>, but if we
@@ -22,7 +26,9 @@ import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )
 

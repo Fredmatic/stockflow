@@ -207,5 +207,21 @@ To add or tune a business type, edit that file — no page needs to change.
 
 ## Database update
 
+<<<<<<< HEAD
 Run `supabase/migrations/015_multi_business_and_business_types.sql` in the Supabase SQL Editor
 **before** deploying this version.
+=======
+Run these in the Supabase SQL Editor **before** deploying this version, in order:
+1. `supabase/migrations/015_multi_business_and_business_types.sql`
+2. `supabase/migrations/016_client_errors.sql` (error monitoring — read crashes in Table Editor → client_errors)
+
+## WhatsApp reports
+
+Owners get a **Send today's report on WhatsApp** button on the Dashboard (and a combined one on My Businesses).
+It uses WhatsApp click-to-chat links, so there is no API, no approval and no cost.
+
+## Tests
+
+`npm test` runs money maths, business profiles, WhatsApp reports, signup recovery, error logging,
+and screen tests (till questions per business, services per business, owner vs cashier, crash screen).
+>>>>>>> f61ec8e (new feature)

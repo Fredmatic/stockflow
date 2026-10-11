@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { canAccess } from './lib/permissions'
-import Landing from './pages/Landing'
-import LoginPage from './pages/LoginPage'
-import Signup from './pages/Signup'
-import ResetPassword from './pages/ResetPassword'
+const Landing = lazy(() => import('./pages/Landing'))
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const Signup = lazy(() => import('./pages/Signup'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 import TrialExpiredScreen, { daysLeft } from './pages/TrialExpired'
-import StaffPicker from './pages/StaffPicker'
+const StaffPicker = lazy(() => import('./pages/StaffPicker'))
 import Layout from './components/Layout'
+<<<<<<< HEAD
 import Dashboard from './pages/Dashboard'
 import Products from './pages/Products'
 import StockIn from './pages/StockIn'
@@ -26,6 +27,24 @@ import Reminders from './pages/Reminders'
 import BusinessInfo from './pages/BusinessInfo'
 import Businesses from './pages/Businesses'
 import StockCount from './pages/StockCount'
+=======
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Products = lazy(() => import('./pages/Products'))
+const StockIn = lazy(() => import('./pages/StockIn'))
+const Sell = lazy(() => import('./pages/Sell'))
+const Sales = lazy(() => import('./pages/Sales'))
+const Customers = lazy(() => import('./pages/Customers'))
+const Services = lazy(() => import('./pages/Services'))
+const Lenders = lazy(() => import('./pages/Lenders'))
+const Staff = lazy(() => import('./pages/Staff'))
+const Expenses = lazy(() => import('./pages/Expenses'))
+const Spending = lazy(() => import('./pages/Spending'))
+const Reports = lazy(() => import('./pages/Reports'))
+const Reminders = lazy(() => import('./pages/Reminders'))
+const BusinessInfo = lazy(() => import('./pages/BusinessInfo'))
+const Businesses = lazy(() => import('./pages/Businesses'))
+const StockCount = lazy(() => import('./pages/StockCount'))
+>>>>>>> f61ec8e (new feature)
 import SplashScreen from './components/SplashScreen'
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/reset-password']
@@ -128,6 +147,7 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
+          <Suspense fallback={<BlankLoader />}>
           <Gate>
             <Routes>
               {/* Public routes */}
@@ -158,6 +178,7 @@ export default function App() {
               </Route>
             </Routes>
           </Gate>
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>

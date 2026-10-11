@@ -5,6 +5,10 @@ import { useAuth } from '../context/AuthContext'
 import { getProfile, servicesEnabled } from '../lib/businessTypes'
 import Spinner from '../components/Spinner'
 import AddBusinessModal from '../components/AddBusinessModal'
+<<<<<<< HEAD
+=======
+import WhatsAppReportButton from '../components/WhatsAppReportButton'
+>>>>>>> f61ec8e (new feature)
 
 // "My Businesses" — every business this owner runs, side by side, with today's
 // takings for each, so the owner can see the whole picture and jump into any one.
@@ -80,6 +84,18 @@ export default function Businesses() {
         </div>
       )}
 
+<<<<<<< HEAD
+=======
+      {businesses.length > 0 && (
+        <div>
+          <WhatsAppReportButton
+            businesses={businesses}
+            label={businesses.length > 1 ? 'Send combined report on WhatsApp' : undefined}
+          />
+        </div>
+      )}
+
+>>>>>>> f61ec8e (new feature)
       {loading ? (
         <Spinner />
       ) : (

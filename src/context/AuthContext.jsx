@@ -1,6 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { hashPin } from '../lib/pinHash'
+<<<<<<< HEAD
+=======
+import { setErrorContext } from '../lib/errorLog'
+import { readPendingBusiness, clearPendingBusiness } from '../lib/pendingBusiness'
+>>>>>>> f61ec8e (new feature)
 
 const AuthContext = createContext(null)
 
@@ -87,8 +92,32 @@ export function AuthProvider({ children }) {
     async function loadBusinesses() {
       setBusinessLoading(true)
       setBusinessError(null)
+<<<<<<< HEAD
       const { data, error } = await fetchBusinesses(session.user.id)
+=======
+      let { data, error } = await fetchBusinesses(session.user.id)
+>>>>>>> f61ec8e (new feature)
       if (cancelled) return
+
+      // First sign-in after confirming their email: create the business they
+      // described at signup (it could not be saved before they had a session).
+      if (!error && data.length === 0) {
+        const pending = readPendingBusiness(session.user.email)
+        if (pending) {
+          const { error: insertError } = await supabase.from('businesses').insert({
+            owner_auth_id: session.user.id,
+            name: pending.name,
+            type: pending.type,
+            owner_name: pending.ownerName || null,
+          })
+          if (!insertError) {
+            clearPendingBusiness()
+            localStorage.setItem('stocktracer_new_account', '1') // sends them to add their first staff member
+            ;({ data, error } = await fetchBusinesses(session.user.id))
+            if (cancelled) return
+          }
+        }
+      }
 
       if (error) {
         // A real failure (network, RLS, etc) — surface it instead of
@@ -123,6 +152,13 @@ export function AuthProvider({ children }) {
       : readSavedStaff(business.id)
     : null
 
+<<<<<<< HEAD
+=======
+  useEffect(() => {
+    setErrorContext({ businessId: business?.id })
+  }, [business?.id])
+
+>>>>>>> f61ec8e (new feature)
   // Pages call setBusiness(prev => ({...prev, ...changes})) after editing the
   // business. Keep that working: it updates the active business inside the list.
   const setBusiness = useCallback(
